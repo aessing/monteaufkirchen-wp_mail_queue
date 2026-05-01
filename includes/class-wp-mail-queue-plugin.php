@@ -28,11 +28,27 @@ class WP_Mail_Queue_Plugin {
 	private $installer;
 
 	/**
+	 * Repository dependency.
+	 *
+	 * @var WP_Mail_Queue_Repository
+	 */
+	private $repository;
+
+	/**
+	 * Source detector dependency.
+	 *
+	 * @var WP_Mail_Queue_Source_Detector
+	 */
+	private $source_detector;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->settings  = new WP_Mail_Queue_Settings();
-		$this->installer = new WP_Mail_Queue_Installer( $this->settings );
+		$this->settings        = new WP_Mail_Queue_Settings();
+		$this->installer       = new WP_Mail_Queue_Installer( $this->settings );
+		$this->repository      = new WP_Mail_Queue_Repository( $this->settings );
+		$this->source_detector = new WP_Mail_Queue_Source_Detector();
 	}
 
 	/**
@@ -63,5 +79,23 @@ class WP_Mail_Queue_Plugin {
 	 */
 	public function installer() {
 		return $this->installer;
+	}
+
+	/**
+	 * Returns repository dependency.
+	 *
+	 * @return WP_Mail_Queue_Repository
+	 */
+	public function repository() {
+		return $this->repository;
+	}
+
+	/**
+	 * Returns source detector dependency.
+	 *
+	 * @return WP_Mail_Queue_Source_Detector
+	 */
+	public function source_detector() {
+		return $this->source_detector;
 	}
 }

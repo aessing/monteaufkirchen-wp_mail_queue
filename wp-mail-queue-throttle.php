@@ -25,6 +25,8 @@ define( 'WMQT_CRON_HOOK', 'wmqt_process_queue' );
 
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-settings.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-installer.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-repository.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-source-detector.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-plugin.php';
 
 /**
