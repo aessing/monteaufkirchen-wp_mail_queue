@@ -63,6 +63,8 @@ class WP_Mail_Queue_Worker {
 		foreach ( $items as $item ) {
 			$this->process_item( $item );
 		}
+
+		$this->repository->purge_old_logs();
 	}
 
 	/**

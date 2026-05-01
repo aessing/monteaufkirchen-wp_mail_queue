@@ -39,26 +39,33 @@ class WP_Mail_Queue_Repository {
 	public function enqueue( array $mail, string $source_plugin = '' ): int {
 		global $wpdb;
 
-		$now = current_time( 'mysql' );
+		$now         = current_time( 'mysql' );
+		$recipients  = $this->encode_json( $mail['to'] ?? '' );
+		$headers     = $this->encode_json( $mail['headers'] ?? '' );
+		$attachments = $this->encode_json( $mail['attachments'] ?? array() );
+		$source      = sanitize_key( $source_plugin );
+
+		if ( false === $recipients || false === $headers || false === $attachments ) {
+			$this->log( 0, 'encode_failed', 'Mail payload could not be JSON encoded; continuing normal wp_mail delivery.', $source );
+			return 0;
+		}
 
 		$inserted = $wpdb->insert(
 			$this->queue_table(),
 			array(
-				'recipients'     => $this->encode_json( $mail['to'] ?? '' ),
-				'subject'        => (string) ( $mail['subject'] ?? '' ),
-				'message'        => (string) ( $mail['message'] ?? '' ),
-				'headers'        => $this->encode_json( $mail['headers'] ?? '' ),
-				'attachments'    => $this->encode_json( $mail['attachments'] ?? array() ),
-				'source_plugin'  => sanitize_key( $source_plugin ),
-				'status'         => 'queued',
-				'attempts'       => 0,
-				'max_attempts'   => max( 1, absint( $this->settings->get( 'max_attempts', 3 ) ) ),
-				'last_error'     => null,
-				'queued_at'      => $now,
-				'updated_at'     => $now,
-				'sent_at'        => null,
+				'recipients'    => $recipients,
+				'subject'       => (string) ( $mail['subject'] ?? '' ),
+				'message'       => (string) ( $mail['message'] ?? '' ),
+				'headers'       => $headers,
+				'attachments'   => $attachments,
+				'source_plugin' => $source,
+				'status'        => 'queued',
+				'attempts'      => 0,
+				'max_attempts'  => max( 1, absint( $this->settings->get( 'max_attempts', 3 ) ) ),
+				'queued_at'     => $now,
+				'updated_at'    => $now,
 			),
-			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s' )
+			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s' )
 		);
 
 		if ( false === $inserted ) {
@@ -131,16 +138,15 @@ class WP_Mail_Queue_Repository {
 	private function recover_stale_processing_items(): void {
 		global $wpdb;
 
-		$table        = $this->queue_table();
-		$now          = current_time( 'mysql' );
-		$stale_before = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - ( 15 * MINUTE_IN_SECONDS ) );
-		$message      = 'Recovered stale processing lock after timeout.';
+		$table   = $this->queue_table();
+		$now     = current_time( 'mysql' );
+		$message = 'Recovered stale processing lock after timeout.';
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT id, source_plugin FROM {$table} WHERE status = %s AND updated_at < %s",
+				"SELECT id, source_plugin FROM {$table} WHERE status = %s AND updated_at < DATE_SUB(%s, INTERVAL 15 MINUTE)",
 				'processing',
-				$stale_before
+				$now
 			),
 			ARRAY_A
 		);
@@ -152,13 +158,13 @@ class WP_Mail_Queue_Repository {
 		foreach ( (array) $rows as $row ) {
 			$updated = $wpdb->query(
 				$wpdb->prepare(
-					"UPDATE {$table} SET status = %s, last_error = %s, updated_at = %s WHERE id = %d AND status = %s AND updated_at < %s",
+					"UPDATE {$table} SET status = %s, last_error = %s, updated_at = %s WHERE id = %d AND status = %s AND updated_at < DATE_SUB(%s, INTERVAL 15 MINUTE)",
 					'queued',
 					$message,
 					$now,
 					(int) $row['id'],
 					'processing',
-					$stale_before
+					$now
 				)
 			);
 
@@ -297,25 +303,38 @@ class WP_Mail_Queue_Repository {
 	 * @param int    $limit Row limit.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public function queue_items( string $status = '', int $limit = 100 ): array {
+	public function queue_items( string $status = 'active', int $limit = 100, int $offset = 0 ): array {
 		global $wpdb;
 
-		$limit  = max( 1, absint( $limit ) );
+		$limit  = min( 200, max( 1, absint( $limit ) ) );
+		$offset = max( 0, absint( $offset ) );
 		$status = sanitize_key( $status );
 		$table  = $this->queue_table();
 
-		if ( '' !== $status ) {
+		if ( 'active' === $status || '' === $status ) {
 			$rows = $wpdb->get_results(
 				$wpdb->prepare(
-					"SELECT * FROM {$table} WHERE status = %s ORDER BY id DESC LIMIT %d",
+					"SELECT * FROM {$table} WHERE status IN (%s, %s) ORDER BY id DESC LIMIT %d OFFSET %d",
+					'queued',
+					'processing',
+					$limit,
+					$offset
+				),
+				ARRAY_A
+			);
+		} elseif ( in_array( $status, array( 'queued', 'processing', 'sent', 'failed' ), true ) ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM {$table} WHERE status = %s ORDER BY id DESC LIMIT %d OFFSET %d",
 					$status,
-					$limit
+					$limit,
+					$offset
 				),
 				ARRAY_A
 			);
 		} else {
 			$rows = $wpdb->get_results(
-				$wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d", $limit ),
+				$wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d OFFSET %d", $limit, $offset ),
 				ARRAY_A
 			);
 		}
@@ -324,20 +343,115 @@ class WP_Mail_Queue_Repository {
 	}
 
 	/**
-	 * Returns recent log entries.
+	 * Counts queue items for an admin status filter.
 	 *
-	 * @param int $limit Row limit.
-	 * @return array<int, array<string, mixed>>
+	 * @param string $status Optional status filter.
+	 * @return int
 	 */
-	public function logs( int $limit = 100 ): array {
+	public function queue_items_count( string $status = 'active' ): int {
 		global $wpdb;
 
+		$status = sanitize_key( $status );
+		$table  = $this->queue_table();
+
+		if ( 'active' === $status || '' === $status ) {
+			return (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$table} WHERE status IN (%s, %s)",
+					'queued',
+					'processing'
+				)
+			);
+		}
+
+		if ( in_array( $status, array( 'queued', 'processing', 'sent', 'failed' ), true ) ) {
+			return (int) $wpdb->get_var(
+				$wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE status = %s", $status )
+			);
+		}
+
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	}
+
+	/**
+	 * Returns recent log entries.
+	 *
+	 * @param string $event_type Optional event filter.
+	 * @param int    $limit Row limit.
+	 * @param int    $offset Row offset.
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function logs( string $event_type = '', int $limit = 100, int $offset = 0 ): array {
+		global $wpdb;
+
+		$limit       = min( 200, max( 1, absint( $limit ) ) );
+		$offset      = max( 0, absint( $offset ) );
+		$event_type  = sanitize_key( $event_type );
+		$logs_table  = $this->logs_table();
+		$queue_table = $this->queue_table();
+		$select      = "SELECT l.*, q.recipients, q.subject, q.status AS queue_status, q.attempts, q.last_error, q.queued_at, q.sent_at, COALESCE(NULLIF(l.source_plugin, ''), q.source_plugin, '') AS resolved_source_plugin FROM {$logs_table} l LEFT JOIN {$queue_table} q ON q.id = l.queue_id";
+
+		if ( '' !== $event_type ) {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"{$select} WHERE l.event_type = %s ORDER BY l.id DESC LIMIT %d OFFSET %d",
+					$event_type,
+					$limit,
+					$offset
+				),
+				ARRAY_A
+			);
+		} else {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( "{$select} ORDER BY l.id DESC LIMIT %d OFFSET %d", $limit, $offset ),
+				ARRAY_A
+			);
+		}
+
+		return array_map( array( $this, 'decode_log_row' ), (array) $rows );
+	}
+
+	/**
+	 * Counts log rows for an event filter.
+	 *
+	 * @param string $event_type Optional event filter.
+	 * @return int
+	 */
+	public function logs_count( string $event_type = '' ): int {
+		global $wpdb;
+
+		$event_type = sanitize_key( $event_type );
+		$table      = $this->logs_table();
+
+		if ( '' !== $event_type ) {
+			return (int) $wpdb->get_var(
+				$wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE event_type = %s", $event_type )
+			);
+		}
+
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+	}
+
+	/**
+	 * Deletes old log rows according to configured retention.
+	 *
+	 * @return int Deleted row count.
+	 */
+	public function purge_old_logs(): int {
+		global $wpdb;
+
+		$days  = max( 1, absint( $this->settings->get( 'log_retention_days', 30 ) ) );
 		$table = $this->logs_table();
 
-		return $wpdb->get_results(
-			$wpdb->prepare( "SELECT * FROM {$table} ORDER BY id DESC LIMIT %d", max( 1, absint( $limit ) ) ),
-			ARRAY_A
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				current_time( 'mysql' ),
+				$days
+			)
 		);
+
+		return false === $deleted ? 0 : (int) $deleted;
 	}
 
 	/**
@@ -366,12 +480,10 @@ class WP_Mail_Queue_Repository {
 	 * Encodes a value for JSON storage.
 	 *
 	 * @param mixed $value Value to encode.
-	 * @return string
+	 * @return string|false
 	 */
-	private function encode_json( $value ): string {
-		$encoded = wp_json_encode( $value );
-
-		return false === $encoded ? 'null' : $encoded;
+	private function encode_json( $value ) {
+		return wp_json_encode( $value );
 	}
 
 	/**
@@ -387,6 +499,22 @@ class WP_Mail_Queue_Repository {
 		$row['attachments']  = $this->decode_json( $row['attachments'] ?? '[]' );
 		$row['attempts']     = (int) $row['attempts'];
 		$row['max_attempts'] = (int) $row['max_attempts'];
+
+		return $row;
+	}
+
+	/**
+	 * Decodes one log row and attached queue data for callers.
+	 *
+	 * @param array<string, mixed> $row Database row.
+	 * @return array<string, mixed>
+	 */
+	private function decode_log_row( array $row ): array {
+		$row['id']            = (int) ( $row['id'] ?? 0 );
+		$row['queue_id']      = (int) ( $row['queue_id'] ?? 0 );
+		$row['to']            = $this->decode_json( $row['recipients'] ?? '[]' );
+		$row['attempts']      = isset( $row['attempts'] ) ? (int) $row['attempts'] : 0;
+		$row['source_plugin'] = (string) ( $row['resolved_source_plugin'] ?? $row['source_plugin'] ?? '' );
 
 		return $row;
 	}

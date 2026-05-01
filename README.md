@@ -19,7 +19,7 @@ By default, the plugin:
 - Processes the queue every two minutes with WP-Cron.
 - Sends up to 25 mails per minute, which means up to 50 queued messages per two-minute worker run.
 - Retries failed messages up to 3 total attempts.
-- Keeps log entries visible in the admin log view, with a default log retention setting of 30 days.
+- Keeps log entries visible in the admin log view and prunes old log rows during worker runs, with a default log retention setting of 30 days.
 - Uses `email-users,send-users-email` as the default selected plugin slug list for sites that switch from all-source queueing to selected-plugin queueing.
 
 When a message is queued successfully, the original `wp_mail()` call is short-circuited so it is not sent immediately. If queue insertion fails, normal `wp_mail()` delivery is allowed to continue.
@@ -38,7 +38,7 @@ If a WP-Cron request times out or is killed after claiming messages, the next wo
 
 The plugin replays queued messages by calling WordPress `wp_mail()` during the queue worker run. That means it works with FluentSMTP and similar SMTP plugins through the normal WordPress mail pipeline.
 
-Install and configure FluentSMTP as the active mail transport before relying on the queue. Queued messages keep their original recipients, subject, message body, headers, and attachments, then are sent later through the configured `wp_mail()` transport. The plugin enables an internal bypass during replay so its own worker sends are not queued again.
+Install and configure FluentSMTP as the active mail transport before relying on the queue. Queued messages keep their original recipients, subject, message body, headers, and attachments, then are sent later through the configured `wp_mail()` transport. Attachments are replayed as the original WordPress file paths, so treat queued payloads as trusted internal mail data. The plugin enables an internal bypass during replay so its own worker sends are not queued again.
 
 ## Source Plugin Filtering
 
@@ -47,7 +47,7 @@ The plugin can queue mail from all sources or only selected source plugins.
 - **All sources**: every eligible `wp_mail()` call is queued.
 - **Selected plugins**: only calls detected from configured plugin slugs are queued.
 
-Source detection uses the PHP call stack and looks for files under `wp-content/plugins/{plugin-slug}/`. Known transport plugins such as `fluent-smtp` are skipped so the detected source remains the plugin that initiated the mail, such as `send-users-email`. Calls that cannot be matched to a plugin slug are not queued when selected-plugin mode is enabled. Configure selected slugs as a comma-separated list in **Mail Queue > Settings**.
+Source detection uses the PHP call stack and looks for files under `wp-content/plugins/{plugin-slug}/`. Known transport plugins such as `fluent-smtp` are skipped so the detected source remains the plugin that initiated the mail, such as `send-users-email`. Calls that cannot be matched to a plugin slug are not queued when selected-plugin mode is enabled. Configure selected slugs as a comma-separated list in **Mail Queue > Settings**. This is a throttling heuristic, not a security boundary.
 
 Developers can customize ignored transport slugs with the `wmqt_ignored_source_plugin_slugs` filter.
 
@@ -61,11 +61,15 @@ The plugin adds a top-level **Mail Queue** admin menu for administrators with `m
 
 - **Dashboard**: shows queue counts, configured send rate, per-run batch limit, and the next scheduled cron run.
 - **Settings**: configures mails per minute, max retries, queue mode, allowed plugin slugs, and log retention days.
-- **Queue**: lists recent queued, processing, sent, and failed messages with recipients, subject, source plugin, attempts, errors, queued time, and sent time.
-- **Logs**: lists recent queue events such as queued, sent, retry, failed, and enqueue failure events.
+- **Queue**: lists active queued and processing messages by default, with recipients, subject, source plugin, status, attempts, errors, queued time, sent time, filtering, and pagination.
+- **Logs**: lists all queue events by default, with filters, pagination, and related mail details including recipients, subject, source plugin, queue status, attempts, errors, queued time, and sent time.
 
 Settings are stored in the `wmqt_settings` option.
+
+Max retry attempts are stored on each queue item when it is created. Changing the setting later affects newly queued mail, not already queued rows.
 
 ## Deactivation Behavior
 
 Deactivation clears the scheduled queue processing hook. It does not delete plugin settings, queue rows, log rows, or database tables. Reactivating the plugin recreates or updates the required tables if needed and schedules processing again.
+
+Deleting the plugin through WordPress runs `uninstall.php`, which removes the plugin option, queue table, and log table.

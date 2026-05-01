@@ -14,6 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 class WP_Mail_Queue_Admin {
 	const MENU_SLUG = 'wp-mail-queue';
+	const PER_PAGE  = 50;
 
 	/**
 	 * Settings dependency.
@@ -217,36 +218,47 @@ class WP_Mail_Queue_Admin {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
 		}
 
-		$status = $this->requested_status();
-		$items  = $this->repository->queue_items( $status );
+		$status = $this->requested_queue_status();
+		$paged  = $this->requested_page_number();
+		$total  = $this->repository->queue_items_count( $status );
+		$items  = $this->repository->queue_items( $status, self::PER_PAGE, ( $paged - 1 ) * self::PER_PAGE );
 
 		echo '<div class="wrap wmqt-admin">';
+		echo '<div class="wmqt-page-header">';
+		echo '<div>';
 		echo '<h1>' . esc_html__( 'Mail Queue', 'wp-mail-queue-throttle' ) . '</h1>';
-		$this->render_status_filter( $status );
-		echo '<table class="widefat striped wmqt-table">';
+		echo '<p>' . esc_html__( 'Active queued and processing messages. Sent and failed history lives in Logs.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '</div>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d item', '%d items', $total, 'wp-mail-queue-throttle' ), $total ) ) . '</span>';
+		echo '</div>';
+		$this->render_queue_status_filter( $status );
+		echo '<div class="wmqt-table-shell">';
+		echo '<table class="widefat wmqt-table">';
 		echo '<thead><tr>';
 		$this->render_table_headers( array( 'ID', 'Recipients', 'Subject', 'Source plugin', 'Status', 'Attempts', 'Last error', 'Queued', 'Sent' ) );
 		echo '</tr></thead><tbody>';
 
 		if ( empty( $items ) ) {
-			echo '<tr><td colspan="9">' . esc_html__( 'No queue items found.', 'wp-mail-queue-throttle' ) . '</td></tr>';
+			echo '<tr><td colspan="9"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
 		}
 
 		foreach ( $items as $item ) {
 			echo '<tr>';
 			echo '<td>' . esc_html( (string) (int) ( $item['id'] ?? 0 ) ) . '</td>';
-			echo '<td>' . esc_html( $this->format_recipients( $item['to'] ?? array() ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['subject'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['source_plugin'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['status'] ?? '' ) ) . '</td>';
+			echo '<td class="wmqt-recipients">' . esc_html( $this->format_recipients( $item['to'] ?? array() ) ) . '</td>';
+			echo '<td class="wmqt-subject">' . esc_html( (string) ( $item['subject'] ?? '' ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $item['source_plugin'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . $this->status_badge( (string) ( $item['status'] ?? '' ) ) . '</td>';
 			echo '<td>' . esc_html( (string) (int) ( $item['attempts'] ?? 0 ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['last_error'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['queued_at'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $item['sent_at'] ?? '' ) ) . '</td>';
+			echo '<td class="wmqt-error">' . esc_html( $this->fallback_text( (string) ( $item['last_error'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $item['queued_at'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $item['sent_at'] ?? '' ) ) ) . '</td>';
 			echo '</tr>';
 		}
 
 		echo '</tbody></table>';
+		echo '</div>';
+		$this->render_pagination( 'wp-mail-queue-items', $paged, $total, array( 'status' => $status ) );
 		echo '</div>';
 	}
 
@@ -260,30 +272,50 @@ class WP_Mail_Queue_Admin {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
 		}
 
-		$logs = $this->repository->logs();
+		$event_type = $this->requested_event_type();
+		$paged      = $this->requested_page_number();
+		$total      = $this->repository->logs_count( $event_type );
+		$logs       = $this->repository->logs( $event_type, self::PER_PAGE, ( $paged - 1 ) * self::PER_PAGE );
 
 		echo '<div class="wrap wmqt-admin">';
+		echo '<div class="wmqt-page-header">';
+		echo '<div>';
 		echo '<h1>' . esc_html__( 'Mail Queue Logs', 'wp-mail-queue-throttle' ) . '</h1>';
-		echo '<table class="widefat striped wmqt-table">';
+		echo '<p>' . esc_html__( 'Delivery events with the related message details.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '</div>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d event', '%d events', $total, 'wp-mail-queue-throttle' ), $total ) ) . '</span>';
+		echo '</div>';
+		$this->render_log_filter( $event_type );
+		echo '<div class="wmqt-table-shell">';
+		echo '<table class="widefat wmqt-table">';
 		echo '<thead><tr>';
-		$this->render_table_headers( array( 'Timestamp', 'Event type', 'Queue item ID', 'Source plugin', 'Message' ) );
+		$this->render_table_headers( array( 'Timestamp', 'Event', 'Queue ID', 'Recipients', 'Subject', 'Source plugin', 'Status', 'Attempts', 'Last error', 'Queued', 'Sent', 'Message' ) );
 		echo '</tr></thead><tbody>';
 
 		if ( empty( $logs ) ) {
-			echo '<tr><td colspan="5">' . esc_html__( 'No log entries found.', 'wp-mail-queue-throttle' ) . '</td></tr>';
+			echo '<tr><td colspan="12"><div class="wmqt-empty">' . esc_html__( 'No log entries found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
 		}
 
 		foreach ( $logs as $log ) {
 			echo '<tr>';
 			echo '<td>' . esc_html( (string) ( $log['created_at'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $log['event_type'] ?? '' ) ) . '</td>';
+			echo '<td>' . $this->status_badge( (string) ( $log['event_type'] ?? '' ) ) . '</td>';
 			echo '<td>' . esc_html( (string) (int) ( $log['queue_id'] ?? 0 ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $log['source_plugin'] ?? '' ) ) . '</td>';
-			echo '<td>' . esc_html( (string) ( $log['message'] ?? '' ) ) . '</td>';
+			echo '<td class="wmqt-recipients">' . esc_html( $this->format_recipients( $log['to'] ?? array() ) ) . '</td>';
+			echo '<td class="wmqt-subject">' . esc_html( $this->fallback_text( (string) ( $log['subject'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $log['source_plugin'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . $this->status_badge( (string) ( $log['queue_status'] ?? '' ) ) . '</td>';
+			echo '<td>' . esc_html( (string) (int) ( $log['attempts'] ?? 0 ) ) . '</td>';
+			echo '<td class="wmqt-error">' . esc_html( $this->fallback_text( (string) ( $log['last_error'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $log['queued_at'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $log['sent_at'] ?? '' ) ) ) . '</td>';
+			echo '<td class="wmqt-error">' . esc_html( (string) ( $log['message'] ?? '' ) ) . '</td>';
 			echo '</tr>';
 		}
 
 		echo '</tbody></table>';
+		echo '</div>';
+		$this->render_pagination( 'wp-mail-queue-logs', $paged, $total, array( 'event_type' => $event_type ) );
 		echo '</div>';
 	}
 
@@ -395,13 +427,11 @@ class WP_Mail_Queue_Admin {
 	 * @param string $selected Selected status.
 	 * @return void
 	 */
-	private function render_status_filter( $selected ) {
+	private function render_queue_status_filter( $selected ) {
 		$statuses = array(
-			''           => __( 'All statuses', 'wp-mail-queue-throttle' ),
+			'active'     => __( 'Queued + processing', 'wp-mail-queue-throttle' ),
 			'queued'     => __( 'Queued', 'wp-mail-queue-throttle' ),
 			'processing' => __( 'Processing', 'wp-mail-queue-throttle' ),
-			'sent'       => __( 'Sent', 'wp-mail-queue-throttle' ),
-			'failed'     => __( 'Failed', 'wp-mail-queue-throttle' ),
 		);
 
 		echo '<form method="get" class="wmqt-filter">';
@@ -413,6 +443,41 @@ class WP_Mail_Queue_Admin {
 				'<option value="%s" %s>%s</option>',
 				esc_attr( $status ),
 				selected( $status, $selected, false ),
+				esc_html( $label )
+			);
+		}
+		echo '</select> ';
+		submit_button( __( 'Filter', 'wp-mail-queue-throttle' ), 'secondary', '', false );
+		echo '</form>';
+	}
+
+	/**
+	 * Renders the log event filter.
+	 *
+	 * @param string $selected Selected event type.
+	 * @return void
+	 */
+	private function render_log_filter( $selected ) {
+		$events = array(
+			''               => __( 'All events', 'wp-mail-queue-throttle' ),
+			'queued'         => __( 'Queued', 'wp-mail-queue-throttle' ),
+			'sent'           => __( 'Sent', 'wp-mail-queue-throttle' ),
+			'retry'          => __( 'Retry', 'wp-mail-queue-throttle' ),
+			'failed'         => __( 'Failed', 'wp-mail-queue-throttle' ),
+			'recovered'      => __( 'Recovered', 'wp-mail-queue-throttle' ),
+			'encode_failed'  => __( 'Encode failed', 'wp-mail-queue-throttle' ),
+			'enqueue_failed' => __( 'Enqueue failed', 'wp-mail-queue-throttle' ),
+		);
+
+		echo '<form method="get" class="wmqt-filter">';
+		echo '<input type="hidden" name="page" value="wp-mail-queue-logs">';
+		echo '<label for="wmqt-event-filter">' . esc_html__( 'Event', 'wp-mail-queue-throttle' ) . '</label> ';
+		echo '<select id="wmqt-event-filter" name="event_type">';
+		foreach ( $events as $event => $label ) {
+			printf(
+				'<option value="%s" %s>%s</option>',
+				esc_attr( $event ),
+				selected( $event, $selected, false ),
 				esc_html( $label )
 			);
 		}
@@ -438,10 +503,30 @@ class WP_Mail_Queue_Admin {
 	 *
 	 * @return string
 	 */
-	private function requested_status() {
+	private function requested_queue_status() {
 		$status = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : '';
 
-		return in_array( $status, array( 'queued', 'processing', 'sent', 'failed' ), true ) ? $status : '';
+		return in_array( $status, array( 'active', 'queued', 'processing' ), true ) ? $status : 'active';
+	}
+
+	/**
+	 * Returns an allowlisted requested log event type.
+	 *
+	 * @return string
+	 */
+	private function requested_event_type() {
+		$event_type = isset( $_GET['event_type'] ) ? sanitize_key( wp_unslash( $_GET['event_type'] ) ) : '';
+
+		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed' ), true ) ? $event_type : '';
+	}
+
+	/**
+	 * Returns the requested admin page number.
+	 *
+	 * @return int
+	 */
+	private function requested_page_number() {
+		return max( 1, absint( isset( $_GET['paged'] ) ? wp_unslash( $_GET['paged'] ) : 1 ) );
 	}
 
 	/**
@@ -456,6 +541,76 @@ class WP_Mail_Queue_Admin {
 		}
 
 		return (string) $recipients;
+	}
+
+	/**
+	 * Returns readable placeholder text for empty table values.
+	 *
+	 * @param string $value Raw value.
+	 * @return string
+	 */
+	private function fallback_text( $value ) {
+		return '' === trim( $value ) ? 'n/a' : $value;
+	}
+
+	/**
+	 * Returns an escaped status badge.
+	 *
+	 * @param string $status Status or event slug.
+	 * @return string
+	 */
+	private function status_badge( $status ) {
+		$status = sanitize_key( $status );
+
+		if ( '' === $status ) {
+			return '<span class="wmqt-badge wmqt-badge-empty">n/a</span>';
+		}
+
+		return sprintf(
+			'<span class="wmqt-badge wmqt-badge-%1$s">%2$s</span>',
+			esc_attr( $status ),
+			esc_html( ucwords( str_replace( '_', ' ', $status ) ) )
+		);
+	}
+
+	/**
+	 * Renders pagination links for table screens.
+	 *
+	 * @param string               $page_slug Admin page slug.
+	 * @param int                  $paged Current page.
+	 * @param int                  $total Total rows.
+	 * @param array<string,string> $args Extra query args.
+	 * @return void
+	 */
+	private function render_pagination( $page_slug, $paged, $total, array $args = array() ) {
+		$total_pages = (int) ceil( max( 0, $total ) / self::PER_PAGE );
+
+		if ( 2 > $total_pages ) {
+			return;
+		}
+
+		$query_args = array_filter(
+			array_merge( array( 'page' => $page_slug ), $args ),
+			static function ( $value ) {
+				return '' !== (string) $value && 'active' !== (string) $value;
+			}
+		);
+		$base = add_query_arg( array_merge( $query_args, array( 'paged' => '%#%' ) ), admin_url( 'admin.php' ) );
+
+		echo '<div class="wmqt-pagination">';
+		echo wp_kses_post(
+			paginate_links(
+				array(
+					'base'      => esc_url_raw( $base ),
+					'format'    => '',
+					'current'   => max( 1, (int) $paged ),
+					'total'     => $total_pages,
+					'prev_text' => __( 'Previous', 'wp-mail-queue-throttle' ),
+					'next_text' => __( 'Next', 'wp-mail-queue-throttle' ),
+				)
+			)
+		);
+		echo '</div>';
 	}
 
 	/**

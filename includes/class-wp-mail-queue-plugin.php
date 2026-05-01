@@ -72,7 +72,6 @@ class WP_Mail_Queue_Plugin {
 		$this->source_detector = new WP_Mail_Queue_Source_Detector();
 		$this->interceptor     = new WP_Mail_Queue_Interceptor( $this->settings, $this->repository, $this->source_detector );
 		$this->worker          = new WP_Mail_Queue_Worker( $this->settings, $this->repository, $this->interceptor );
-		$this->admin           = new WP_Mail_Queue_Admin( $this->settings, $this->repository );
 	}
 
 	/**
@@ -84,7 +83,10 @@ class WP_Mail_Queue_Plugin {
 		add_filter( 'cron_schedules', array( $this->installer, 'add_cron_schedule' ) );
 		add_filter( 'pre_wp_mail', array( $this->interceptor, 'pre_wp_mail' ), 10, 2 );
 		add_action( WMQT_CRON_HOOK, array( $this->worker, 'process_queue' ) );
-		$this->admin->init();
+
+		if ( is_admin() ) {
+			$this->admin()->init();
+		}
 	}
 
 	/**
@@ -147,6 +149,10 @@ class WP_Mail_Queue_Plugin {
 	 * @return WP_Mail_Queue_Admin
 	 */
 	public function admin() {
+		if ( ! $this->admin instanceof WP_Mail_Queue_Admin ) {
+			$this->admin = new WP_Mail_Queue_Admin( $this->settings, $this->repository );
+		}
+
 		return $this->admin;
 	}
 }
