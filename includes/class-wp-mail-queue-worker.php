@@ -79,10 +79,10 @@ class WP_Mail_Queue_Worker {
 			$this->interceptor->enable_bypass();
 
 			$sent = wp_mail(
-				$item['to'] ?? array(),
+				$item['to'] ?? '',
 				(string) ( $item['subject'] ?? '' ),
 				(string) ( $item['message'] ?? '' ),
-				$item['headers'] ?? array(),
+				$item['headers'] ?? '',
 				$item['attachments'] ?? array()
 			);
 

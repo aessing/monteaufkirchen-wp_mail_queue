@@ -93,8 +93,12 @@ class WP_Mail_Queue_Interceptor {
 	 * @return null|bool
 	 */
 	public function pre_wp_mail( $pre, $atts ) {
+		if ( null !== $pre ) {
+			return $pre;
+		}
+
 		if ( $this->is_bypassing() ) {
-			return null;
+			return $pre;
 		}
 
 		$mail          = $this->normalize_atts( is_array( $atts ) ? $atts : array() );
@@ -105,6 +109,12 @@ class WP_Mail_Queue_Interceptor {
 		}
 
 		$queue_id = $this->repository->enqueue( $mail, $source_plugin );
+
+		if ( 1 > $queue_id ) {
+			$this->repository->log( 0, 'enqueue_failed', 'Mail could not be queued; continuing normal wp_mail delivery.', $source_plugin );
+			return null;
+		}
+
 		$this->repository->log( $queue_id, 'queued', 'Mail queued for throttled delivery.', $source_plugin );
 
 		return true;
@@ -118,30 +128,12 @@ class WP_Mail_Queue_Interceptor {
 	 */
 	private function normalize_atts( array $atts ) {
 		return array(
-			'to'          => $this->normalize_list_value( $atts['to'] ?? array() ),
+			'to'          => $atts['to'] ?? '',
 			'subject'     => (string) ( $atts['subject'] ?? '' ),
 			'message'     => (string) ( $atts['message'] ?? '' ),
-			'headers'     => $this->normalize_list_value( $atts['headers'] ?? array() ),
-			'attachments' => $this->normalize_list_value( $atts['attachments'] ?? array() ),
+			'headers'     => $atts['headers'] ?? '',
+			'attachments' => $atts['attachments'] ?? array(),
 		);
-	}
-
-	/**
-	 * Normalizes scalar or array wp_mail() fields.
-	 *
-	 * @param mixed $value Raw value.
-	 * @return array<int, mixed>
-	 */
-	private function normalize_list_value( $value ) {
-		if ( is_array( $value ) ) {
-			return array_values( $value );
-		}
-
-		if ( null === $value || '' === $value ) {
-			return array();
-		}
-
-		return array( $value );
 	}
 
 	/**

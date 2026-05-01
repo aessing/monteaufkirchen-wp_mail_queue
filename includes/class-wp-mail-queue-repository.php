@@ -41,13 +41,13 @@ class WP_Mail_Queue_Repository {
 
 		$now = current_time( 'mysql' );
 
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			$this->queue_table(),
 			array(
-				'recipients'     => $this->encode_json( $mail['to'] ?? array() ),
+				'recipients'     => $this->encode_json( $mail['to'] ?? '' ),
 				'subject'        => (string) ( $mail['subject'] ?? '' ),
 				'message'        => (string) ( $mail['message'] ?? '' ),
-				'headers'        => $this->encode_json( $mail['headers'] ?? array() ),
+				'headers'        => $this->encode_json( $mail['headers'] ?? '' ),
 				'attachments'    => $this->encode_json( $mail['attachments'] ?? array() ),
 				'source_plugin'  => sanitize_key( $source_plugin ),
 				'status'         => 'queued',
@@ -60,6 +60,10 @@ class WP_Mail_Queue_Repository {
 			),
 			array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%d', '%s', '%s', '%s', '%s' )
 		);
+
+		if ( false === $inserted ) {
+			return 0;
+		}
 
 		return (int) $wpdb->insert_id;
 	}
@@ -174,16 +178,16 @@ class WP_Mail_Queue_Repository {
 	public function mark_failed( int $id, string $error ): void {
 		global $wpdb;
 
-		$wpdb->update(
-			$this->queue_table(),
-			array(
-				'status'     => 'failed',
-				'last_error' => $error,
-				'updated_at' => current_time( 'mysql' ),
-			),
-			array( 'id' => absint( $id ) ),
-			array( '%s', '%s', '%s' ),
-			array( '%d' )
+		$table = $this->queue_table();
+
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s, attempts = attempts + 1, last_error = %s, updated_at = %s WHERE id = %d",
+				'failed',
+				$error,
+				current_time( 'mysql' ),
+				absint( $id )
+			)
 		);
 	}
 
