@@ -22,7 +22,7 @@ class WP_Mail_Queue_Settings {
 		'rate_per_minute'   => 25,
 		'max_attempts'      => 3,
 		'queue_mode'        => 'all',
-		'allowed_plugins'   => 'email-users',
+		'allowed_plugins'   => 'email-users,send-users-email',
 		'log_retention_days' => 30,
 	);
 

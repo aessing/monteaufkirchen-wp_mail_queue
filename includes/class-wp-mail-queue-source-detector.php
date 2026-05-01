@@ -19,8 +19,9 @@ class WP_Mail_Queue_Source_Detector {
 	 * @return string
 	 */
 	public static function detect() {
-		$own_slugs = self::own_slugs();
-		$trace     = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS );
+		$own_slugs     = self::own_slugs();
+		$ignored_slugs = self::ignored_source_slugs();
+		$trace         = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS );
 
 		foreach ( $trace as $frame ) {
 			if ( empty( $frame['file'] ) || ! is_string( $frame['file'] ) ) {
@@ -29,7 +30,7 @@ class WP_Mail_Queue_Source_Detector {
 
 			$slug = self::slug_from_path( $frame['file'] );
 
-			if ( '' !== $slug && ! in_array( $slug, $own_slugs, true ) ) {
+			if ( '' !== $slug && ! in_array( $slug, $own_slugs, true ) && ! in_array( $slug, $ignored_slugs, true ) ) {
 				return $slug;
 			}
 		}
@@ -62,6 +63,27 @@ class WP_Mail_Queue_Source_Detector {
 
 		if ( defined( 'WMQT_PLUGIN_DIR' ) ) {
 			$slugs[] = basename( untrailingslashit( wp_normalize_path( WMQT_PLUGIN_DIR ) ) );
+		}
+
+		$slugs = array_map( 'sanitize_key', $slugs );
+
+		return array_values( array_unique( array_filter( $slugs ) ) );
+	}
+
+	/**
+	 * Returns plugin slugs that are mail transports, not the source of a message.
+	 *
+	 * @return string[]
+	 */
+	private static function ignored_source_slugs() {
+		$slugs = array( 'fluent-smtp' );
+
+		if ( function_exists( 'apply_filters' ) ) {
+			$filtered = apply_filters( 'wmqt_ignored_source_plugin_slugs', $slugs );
+
+			if ( is_array( $filtered ) ) {
+				$slugs = $filtered;
+			}
 		}
 
 		$slugs = array_map( 'sanitize_key', $slugs );

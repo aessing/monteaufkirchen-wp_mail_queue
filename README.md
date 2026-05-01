@@ -20,7 +20,7 @@ By default, the plugin:
 - Sends up to 25 mails per minute, which means up to 50 queued messages per two-minute worker run.
 - Retries failed messages up to 3 total attempts.
 - Keeps log entries visible in the admin log view, with a default log retention setting of 30 days.
-- Uses `email-users` as the default selected plugin slug for sites that switch from all-source queueing to selected-plugin queueing.
+- Uses `email-users,send-users-email` as the default selected plugin slug list for sites that switch from all-source queueing to selected-plugin queueing.
 
 When a message is queued successfully, the original `wp_mail()` call is short-circuited so it is not sent immediately. If queue insertion fails, normal `wp_mail()` delivery is allowed to continue.
 
@@ -47,7 +47,13 @@ The plugin can queue mail from all sources or only selected source plugins.
 - **All sources**: every eligible `wp_mail()` call is queued.
 - **Selected plugins**: only calls detected from configured plugin slugs are queued.
 
-Source detection uses the PHP call stack and looks for files under `wp-content/plugins/{plugin-slug}/`. Calls that cannot be matched to a plugin slug are not queued when selected-plugin mode is enabled. Configure selected slugs as a comma-separated list in **Mail Queue > Settings**.
+Source detection uses the PHP call stack and looks for files under `wp-content/plugins/{plugin-slug}/`. Known transport plugins such as `fluent-smtp` are skipped so the detected source remains the plugin that initiated the mail, such as `send-users-email`. Calls that cannot be matched to a plugin slug are not queued when selected-plugin mode is enabled. Configure selected slugs as a comma-separated list in **Mail Queue > Settings**.
+
+Developers can customize ignored transport slugs with the `wmqt_ignored_source_plugin_slugs` filter.
+
+## Author
+
+Created by [Andre Essing](https://www.linkedin.com/in/aessing/).
 
 ## Settings And Admin Pages
 

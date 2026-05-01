@@ -1,10 +1,11 @@
 <?php
 /**
  * Plugin Name: WP Mail Queue Throttle
- * Plugin URI: https://example.com/wp-mail-queue-throttle
+ * Plugin URI: https://www.linkedin.com/in/aessing/
  * Description: Queues WordPress mail for throttled replay through the configured wp_mail transport.
  * Version: 0.1.0
- * Author: WP Mail Queue
+ * Author: Andre Essing
+ * Author URI: https://www.linkedin.com/in/aessing/
  * License: GPL-2.0-or-later
  * Text Domain: wp-mail-queue-throttle
  *
