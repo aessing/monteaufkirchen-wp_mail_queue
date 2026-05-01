@@ -27,6 +27,8 @@ require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-settings.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-installer.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-repository.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-source-detector.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-interceptor.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-worker.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-plugin.php';
 
 /**

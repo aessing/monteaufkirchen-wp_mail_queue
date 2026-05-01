@@ -42,6 +42,20 @@ class WP_Mail_Queue_Plugin {
 	private $source_detector;
 
 	/**
+	 * Interceptor dependency.
+	 *
+	 * @var WP_Mail_Queue_Interceptor
+	 */
+	private $interceptor;
+
+	/**
+	 * Worker dependency.
+	 *
+	 * @var WP_Mail_Queue_Worker
+	 */
+	private $worker;
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -49,18 +63,19 @@ class WP_Mail_Queue_Plugin {
 		$this->installer       = new WP_Mail_Queue_Installer( $this->settings );
 		$this->repository      = new WP_Mail_Queue_Repository( $this->settings );
 		$this->source_detector = new WP_Mail_Queue_Source_Detector();
+		$this->interceptor     = new WP_Mail_Queue_Interceptor( $this->settings, $this->repository, $this->source_detector );
+		$this->worker          = new WP_Mail_Queue_Worker( $this->settings, $this->repository, $this->interceptor );
 	}
 
 	/**
-	 * Registers foundational hooks.
-	 *
-	 * Later tasks will construct and wire the interceptor, worker, and admin
-	 * classes here after those classes exist.
+	 * Registers plugin hooks.
 	 *
 	 * @return void
 	 */
 	public function init() {
 		add_filter( 'cron_schedules', array( $this->installer, 'add_cron_schedule' ) );
+		add_filter( 'pre_wp_mail', array( $this->interceptor, 'pre_wp_mail' ), 10, 2 );
+		add_action( WMQT_CRON_HOOK, array( $this->worker, 'process_queue' ) );
 	}
 
 	/**
@@ -97,5 +112,23 @@ class WP_Mail_Queue_Plugin {
 	 */
 	public function source_detector() {
 		return $this->source_detector;
+	}
+
+	/**
+	 * Returns interceptor dependency.
+	 *
+	 * @return WP_Mail_Queue_Interceptor
+	 */
+	public function interceptor() {
+		return $this->interceptor;
+	}
+
+	/**
+	 * Returns worker dependency.
+	 *
+	 * @return WP_Mail_Queue_Worker
+	 */
+	public function worker() {
+		return $this->worker;
 	}
 }
