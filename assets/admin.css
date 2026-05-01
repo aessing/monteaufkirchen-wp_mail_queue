@@ -1,0 +1,54 @@
+.wmqt-admin .wmqt-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 16px 0;
+}
+
+.wmqt-card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: 16px;
+	margin-top: 16px;
+	max-width: 1100px;
+}
+
+.wmqt-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+	padding: 16px;
+}
+
+.wmqt-card h2 {
+	color: #50575e;
+	font-size: 13px;
+	font-weight: 600;
+	margin: 0 0 10px;
+	text-transform: uppercase;
+}
+
+.wmqt-card p {
+	color: #1d2327;
+	font-size: 24px;
+	line-height: 1.2;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.wmqt-filter {
+	align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 16px 0;
+}
+
+.wmqt-table {
+	margin-top: 12px;
+}
+
+.wmqt-table td,
+.wmqt-table th {
+	vertical-align: top;
+}
