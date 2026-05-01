@@ -79,6 +79,9 @@ class WP_Mail_Queue_Repository {
 
 		$limit = max( 1, absint( $limit ) );
 		$table = $this->queue_table();
+
+		$this->recover_stale_processing_items();
+
 		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$table} WHERE status = %s ORDER BY id ASC LIMIT %d",
@@ -118,6 +121,51 @@ class WP_Mail_Queue_Repository {
 		}
 
 		return $claimed;
+	}
+
+	/**
+	 * Requeues processing rows that were claimed by an interrupted worker.
+	 *
+	 * @return void
+	 */
+	private function recover_stale_processing_items(): void {
+		global $wpdb;
+
+		$table        = $this->queue_table();
+		$now          = current_time( 'mysql' );
+		$stale_before = gmdate( 'Y-m-d H:i:s', current_time( 'timestamp' ) - ( 15 * MINUTE_IN_SECONDS ) );
+		$message      = 'Recovered stale processing lock after timeout.';
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT id, source_plugin FROM {$table} WHERE status = %s AND updated_at < %s",
+				'processing',
+				$stale_before
+			),
+			ARRAY_A
+		);
+
+		if ( empty( $rows ) ) {
+			return;
+		}
+
+		foreach ( (array) $rows as $row ) {
+			$updated = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, last_error = %s, updated_at = %s WHERE id = %d AND status = %s AND updated_at < %s",
+					'queued',
+					$message,
+					$now,
+					(int) $row['id'],
+					'processing',
+					$stale_before
+				)
+			);
+
+			if ( 1 === $updated ) {
+				$this->log( (int) $row['id'], 'recovered', $message, (string) $row['source_plugin'] );
+			}
+		}
 	}
 
 	/**

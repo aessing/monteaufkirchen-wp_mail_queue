@@ -32,6 +32,8 @@ WP-Cron only runs when the site receives traffic unless a real server cron calls
 
 If WP-Cron is disabled with `DISABLE_WP_CRON`, an external cron runner is required or queued mail will not be processed.
 
+If a WP-Cron request times out or is killed after claiming messages, the next worker run recovers processing locks older than 15 minutes by returning those messages to the queued state without incrementing attempts.
+
 ## FluentSMTP Integration
 
 The plugin replays queued messages by calling WordPress `wp_mail()` during the queue worker run. That means it works with FluentSMTP and similar SMTP plugins through the normal WordPress mail pipeline.
