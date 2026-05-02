@@ -1,10 +1,10 @@
+![Monte Mail Queue Throttle comic illustration](assets/monte-mail-queue-comic-banner.jpg)
+
 # Monte Mail Queue Throttle
 
 A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the site's normal mail transport.
 
 Built for WordPress sites that send bulk mail through providers with strict rate limits, while keeping FluentSMTP or another SMTP plugin in the delivery path.
-
-![Monte Mail Queue Throttle comic illustration](assets/monte-mail-queue-comic.jpg)
 
 ## Highlights
 
