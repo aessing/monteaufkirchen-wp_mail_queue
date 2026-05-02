@@ -1,75 +1,172 @@
 # WP Mail Queue Throttle
 
-WP Mail Queue Throttle intercepts WordPress `wp_mail()` calls, stores eligible messages in a database-backed queue, and replays them through the active WordPress mail transport at a controlled rate.
+A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the site's normal mail transport.
+
+Built for WordPress sites that send bulk mail through providers with strict rate limits, while keeping FluentSMTP or another SMTP plugin in the delivery path.
+
+## Highlights
+
+| Area | What it does |
+| --- | --- |
+| Queueing | Captures WordPress `wp_mail()` calls before immediate delivery. |
+| Throttling | Sends at a configurable rate, defaulting to 25 mails per minute. |
+| Cron cadence | Runs through a custom WP-Cron schedule every 120 seconds. |
+| FluentSMTP | Replays queued mail back through `wp_mail()`, so FluentSMTP still sends the final message. |
+| Source filtering | Can queue all mail or only mail detected from selected plugin slugs such as `send-users-email`. |
+| Admin UI | Includes Dashboard, Settings, Queue, and Logs views. |
+| Reporting | Shows status cards, a stacked 30-day mail volume chart, paginated queue rows, and log history. |
+| Recovery | Requeues stale `processing` jobs after 15 minutes if a cron run is interrupted. |
+
+## Current Version
+
+`0.3.0`
+
+This release adds the polished admin dashboard, stacked 30-day status chart, improved queue and log tables, source plugin detection fixes, stricter database handling, log retention cleanup, and upload-ready packaging.
+
+## Architecture
+
+Default WordPress mail flow:
+
+```text
+WordPress or plugin -> wp_mail() -> FluentSMTP -> SMTP provider
+```
+
+With WP Mail Queue Throttle:
+
+```text
+WordPress or plugin -> wp_mail() -> WP Mail Queue Throttle -> queued database row
+WP-Cron worker -> wp_mail() replay -> FluentSMTP -> SMTP provider
+```
+
+During replay, the plugin enables an internal bypass so the worker's own `wp_mail()` call is not queued again.
 
 ## Installation
 
-1. Upload `wp-mail-queue-throttle.zip` through **Plugins > Add New > Upload Plugin**, or extract the `wp-mail-queue-throttle` folder into `wp-content/plugins/`.
-2. Activate **WP Mail Queue Throttle** from the WordPress Plugins screen.
-3. Confirm the queue worker is scheduled from **Mail Queue > Dashboard**.
-4. Review settings under **Mail Queue > Settings** before sending a large campaign.
+1. Upload `wp-mail-queue-throttle.zip` in WordPress under **Plugins > Add New > Upload Plugin**.
+2. Activate **WP Mail Queue Throttle**.
+3. Open **Mail Queue > Dashboard** and confirm the worker schedule is visible.
+4. Open **Mail Queue > Settings** and review the send rate, retry count, source mode, and log retention.
 
-Activation creates the queue and log tables, stores default settings when no settings exist yet, and schedules the queue processor.
+Activation creates the queue and log tables, stores default settings when needed, and schedules the two-minute queue worker.
 
 ## Default Behavior
 
-By default, the plugin:
+Out of the box, the plugin:
 
-- Queues all `wp_mail()` calls.
+- Queues all eligible `wp_mail()` calls.
 - Processes the queue every two minutes with WP-Cron.
-- Sends up to 25 mails per minute, which means up to 50 queued messages per two-minute worker run.
+- Sends up to 25 mails per minute, which means up to 50 messages per worker run.
 - Retries failed messages up to 3 total attempts.
-- Keeps log entries visible in the admin log view and prunes old log rows during worker runs, with a default log retention setting of 30 days.
-- Uses `email-users,send-users-email` as the default selected plugin slug list for sites that switch from all-source queueing to selected-plugin queueing.
+- Keeps logs for 30 days by default.
+- Uses `email-users,send-users-email` as the default allowed plugin slug list when selected-plugin queueing is enabled.
+- Falls back to normal immediate delivery if queue insertion fails.
 
-When a message is queued successfully, the original `wp_mail()` call is short-circuited so it is not sent immediately. If queue insertion fails, normal `wp_mail()` delivery is allowed to continue.
+## Admin Screens
 
-## GoDaddy And WP-Cron Assumptions
+### Dashboard
 
-This plugin is designed for hosts where bulk mail needs to be slowed down to avoid provider throttling, including GoDaddy-style shared hosting environments. It relies on WordPress WP-Cron for queue processing.
+The plugin start screen gives administrators a clear operational overview:
 
-WP-Cron only runs when the site receives traffic unless a real server cron calls `wp-cron.php`. For production reliability, especially on low-traffic sites, configure a system cron or hosting control panel cron to request `wp-cron.php` regularly. The plugin registers a custom two-minute schedule and processes a batch on the `wmqt_process_queue` hook.
+- Active queue counts.
+- Failed and sent totals.
+- Configured mails-per-minute rate.
+- Calculated batch size per two-minute cron run.
+- Next scheduled worker run.
+- Stacked 30-day chart for `queued`, `processing`, `failed`, and `sent`.
+- Active queue preview with at least 10 recent queue rows when available.
 
-If WP-Cron is disabled with `DISABLE_WP_CRON`, an external cron runner is required or queued mail will not be processed.
+### Settings
 
-If a WP-Cron request times out or is killed after claiming messages, the next worker run recovers processing locks older than 15 minutes by returning those messages to the queued state without incrementing attempts.
+Configure:
 
-## FluentSMTP Integration
+- Mails per minute.
+- Maximum attempts per message.
+- Queue mode: all sources or selected plugins.
+- Allowed plugin slugs.
+- Log retention in days.
 
-The plugin replays queued messages by calling WordPress `wp_mail()` during the queue worker run. That means it works with FluentSMTP and similar SMTP plugins through the normal WordPress mail pipeline.
+Settings are stored in the `wmqt_settings` option.
 
-Install and configure FluentSMTP as the active mail transport before relying on the queue. Queued messages keep their original recipients, subject, message body, headers, and attachments, then are sent later through the configured `wp_mail()` transport. Attachments are replayed as the original WordPress file paths, so treat queued payloads as trusted internal mail data. The plugin enables an internal bypass during replay so its own worker sends are not queued again.
+### Queue
+
+The queue view focuses on actionable work by default:
+
+- Shows only `queued` and `processing` messages initially.
+- Supports status filtering for other queue states.
+- Uses pagination for large queues.
+- Shows recipients, subject, source plugin, status, attempts, last error, queued time, and sent time.
+
+### Logs
+
+The logs view is built for audit and diagnosis:
+
+- Shows all events by default.
+- Supports event filtering.
+- Uses pagination for large log tables.
+- Keeps the same related message context as the queue view.
+- Includes events such as enqueue, claim, send success, retry, failure, recovery, and encode failures.
+
+## FluentSMTP Notes
+
+WP Mail Queue Throttle does not replace FluentSMTP. It controls when WordPress sends, then hands delivery back to the normal `wp_mail()` pipeline.
+
+Configure FluentSMTP first, then use this plugin to slow down the rate at which queued messages reach FluentSMTP. Attachments are stored and replayed as their original local WordPress file paths, so queued payloads should be treated as trusted internal mail data.
 
 ## Source Plugin Filtering
 
-The plugin can queue mail from all sources or only selected source plugins.
+The plugin can queue either all mail or only mail from selected plugin slugs.
 
-- **All sources**: every eligible `wp_mail()` call is queued.
-- **Selected plugins**: only calls detected from configured plugin slugs are queued.
+Source detection uses the PHP call stack and looks for files under:
 
-Source detection uses the PHP call stack and looks for files under `wp-content/plugins/{plugin-slug}/`. Known transport plugins such as `fluent-smtp` are skipped so the detected source remains the plugin that initiated the mail, such as `send-users-email`. Calls that cannot be matched to a plugin slug are not queued when selected-plugin mode is enabled. Configure selected slugs as a comma-separated list in **Mail Queue > Settings**. This is a throttling heuristic, not a security boundary.
+```text
+wp-content/plugins/{plugin-slug}/
+```
 
-Developers can customize ignored transport slugs with the `wmqt_ignored_source_plugin_slugs` filter.
+Known mail transport plugins such as `fluent-smtp` are ignored during detection so the original sender, for example `send-users-email`, can be recognized instead.
+
+This detection is a throttling convenience, not a security boundary. Developers can customize ignored transport plugin slugs with:
+
+```php
+add_filter( 'wmqt_ignored_source_plugin_slugs', function ( array $slugs ): array {
+	$slugs[] = 'my-transport-plugin';
+	return $slugs;
+} );
+```
+
+## GoDaddy And WP-Cron
+
+This plugin is designed to work with GoDaddy Managed WordPress style hosting where a system cron calls WordPress roughly every two minutes.
+
+WP-Cron normally depends on site traffic. For reliable delivery on quiet sites, make sure the host or a real server cron calls `wp-cron.php` regularly. If `DISABLE_WP_CRON` is enabled, an external cron runner is required.
+
+If a cron request is interrupted after claiming messages, the next worker run recovers stale `processing` rows older than 15 minutes and returns them to `queued`.
+
+## Database Tables
+
+The plugin creates two custom tables using the site's WordPress table prefix:
+
+- `{prefix}wmqt_queue`
+- `{prefix}wmqt_logs`
+
+Deactivation clears the scheduled worker hook but keeps settings, queue rows, logs, and tables. Deleting the plugin through WordPress runs `uninstall.php`, which removes the option, queue table, and log table.
+
+## Upload Package
+
+The repository includes an upload-ready ZIP:
+
+```text
+wp-mail-queue-throttle.zip
+```
+
+Upload that file directly through the WordPress plugin installer.
+
+## Requirements
+
+- WordPress 5.8 or newer.
+- PHP 7.0 or newer.
+- A working WordPress mail transport, such as FluentSMTP.
+- WP-Cron or an external cron runner.
 
 ## Author
 
 Created by [Andre Essing](https://www.linkedin.com/in/aessing/).
-
-## Settings And Admin Pages
-
-The plugin adds a top-level **Mail Queue** admin menu for administrators with `manage_options`.
-
-- **Dashboard**: shows queue counts, configured send rate, per-run batch limit, the next scheduled cron run, a stacked 30-day status chart, and a 10-row active queue preview.
-- **Settings**: configures mails per minute, max retries, queue mode, allowed plugin slugs, and log retention days.
-- **Queue**: lists active queued and processing messages by default, with recipients, subject, source plugin, status, attempts, errors, queued time, sent time, filtering, and pagination.
-- **Logs**: lists all queue events by default, with filters, pagination, and related mail details including recipients, subject, source plugin, queue status, attempts, errors, queued time, and sent time.
-
-Settings are stored in the `wmqt_settings` option.
-
-Max retry attempts are stored on each queue item when it is created. Changing the setting later affects newly queued mail, not already queued rows.
-
-## Deactivation Behavior
-
-Deactivation clears the scheduled queue processing hook. It does not delete plugin settings, queue rows, log rows, or database tables. Reactivating the plugin recreates or updates the required tables if needed and schedules processing again.
-
-Deleting the plugin through WordPress runs `uninstall.php`, which removes the plugin option, queue table, and log table.
