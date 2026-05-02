@@ -12,20 +12,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Creates database tables and manages cron scheduling.
  */
-class WP_Mail_Queue_Installer {
+class Monte_Mail_Queue_Installer {
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param WP_Mail_Queue_Settings $settings Settings dependency.
+	 * @param Monte_Mail_Queue_Settings $settings Settings dependency.
 	 */
-	public function __construct( WP_Mail_Queue_Settings $settings ) {
+	public function __construct( Monte_Mail_Queue_Settings $settings ) {
 		$this->settings = $settings;
 	}
 
@@ -39,7 +39,22 @@ class WP_Mail_Queue_Installer {
 
 		$this->create_tables();
 		$this->ensure_default_settings();
+		update_option( 'wmqt_db_version', WMQT_VERSION );
 		$this->schedule_event();
+	}
+
+	/**
+	 * Updates database schema when a newer plugin version is loaded.
+	 *
+	 * @return void
+	 */
+	public function maybe_upgrade() {
+		if ( get_option( 'wmqt_db_version' ) === WMQT_VERSION ) {
+			return;
+		}
+
+		$this->create_tables();
+		update_option( 'wmqt_db_version', WMQT_VERSION );
 	}
 
 	/**
@@ -95,10 +110,13 @@ class WP_Mail_Queue_Installer {
 			max_attempts int(10) unsigned NOT NULL DEFAULT 3,
 			last_error text NULL,
 			queued_at datetime NOT NULL,
+			next_attempt_at datetime NULL,
 			updated_at datetime NOT NULL,
 			sent_at datetime NULL,
 			PRIMARY KEY  (id),
 			KEY status (status),
+			KEY status_next_attempt (status, next_attempt_at, id),
+			KEY status_updated (status, updated_at),
 			KEY source_plugin (source_plugin),
 			KEY queued_at (queued_at)
 		) {$charset_collate};";

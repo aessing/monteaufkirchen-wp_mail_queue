@@ -12,53 +12,53 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Wires shared dependencies and plugin hooks.
  */
-class WP_Mail_Queue_Plugin {
+class Monte_Mail_Queue_Plugin {
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Installer dependency.
 	 *
-	 * @var WP_Mail_Queue_Installer
+	 * @var Monte_Mail_Queue_Installer
 	 */
 	private $installer;
 
 	/**
 	 * Repository dependency.
 	 *
-	 * @var WP_Mail_Queue_Repository
+	 * @var Monte_Mail_Queue_Repository
 	 */
 	private $repository;
 
 	/**
 	 * Source detector dependency.
 	 *
-	 * @var WP_Mail_Queue_Source_Detector
+	 * @var Monte_Mail_Queue_Source_Detector
 	 */
 	private $source_detector;
 
 	/**
 	 * Interceptor dependency.
 	 *
-	 * @var WP_Mail_Queue_Interceptor
+	 * @var Monte_Mail_Queue_Interceptor
 	 */
 	private $interceptor;
 
 	/**
 	 * Worker dependency.
 	 *
-	 * @var WP_Mail_Queue_Worker
+	 * @var Monte_Mail_Queue_Worker
 	 */
 	private $worker;
 
 	/**
 	 * Admin dependency.
 	 *
-	 * @var WP_Mail_Queue_Admin
+	 * @var Monte_Mail_Queue_Admin
 	 */
 	private $admin;
 
@@ -66,12 +66,12 @@ class WP_Mail_Queue_Plugin {
 	 * Constructor.
 	 */
 	public function __construct() {
-		$this->settings        = new WP_Mail_Queue_Settings();
-		$this->installer       = new WP_Mail_Queue_Installer( $this->settings );
-		$this->repository      = new WP_Mail_Queue_Repository( $this->settings );
-		$this->source_detector = new WP_Mail_Queue_Source_Detector();
-		$this->interceptor     = new WP_Mail_Queue_Interceptor( $this->settings, $this->repository, $this->source_detector );
-		$this->worker          = new WP_Mail_Queue_Worker( $this->settings, $this->repository, $this->interceptor );
+		$this->settings        = new Monte_Mail_Queue_Settings();
+		$this->installer       = new Monte_Mail_Queue_Installer( $this->settings );
+		$this->repository      = new Monte_Mail_Queue_Repository( $this->settings );
+		$this->source_detector = new Monte_Mail_Queue_Source_Detector();
+		$this->interceptor     = new Monte_Mail_Queue_Interceptor( $this->settings, $this->repository, $this->source_detector );
+		$this->worker          = new Monte_Mail_Queue_Worker( $this->settings, $this->repository, $this->interceptor );
 	}
 
 	/**
@@ -80,6 +80,8 @@ class WP_Mail_Queue_Plugin {
 	 * @return void
 	 */
 	public function init() {
+		$this->installer->maybe_upgrade();
+
 		add_filter( 'cron_schedules', array( $this->installer, 'add_cron_schedule' ) );
 		add_filter( 'pre_wp_mail', array( $this->interceptor, 'pre_wp_mail' ), 10, 2 );
 		add_action( WMQT_CRON_HOOK, array( $this->worker, 'process_queue' ) );
@@ -92,7 +94,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns settings dependency.
 	 *
-	 * @return WP_Mail_Queue_Settings
+	 * @return Monte_Mail_Queue_Settings
 	 */
 	public function settings() {
 		return $this->settings;
@@ -101,7 +103,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns installer dependency.
 	 *
-	 * @return WP_Mail_Queue_Installer
+	 * @return Monte_Mail_Queue_Installer
 	 */
 	public function installer() {
 		return $this->installer;
@@ -110,7 +112,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns repository dependency.
 	 *
-	 * @return WP_Mail_Queue_Repository
+	 * @return Monte_Mail_Queue_Repository
 	 */
 	public function repository() {
 		return $this->repository;
@@ -119,7 +121,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns source detector dependency.
 	 *
-	 * @return WP_Mail_Queue_Source_Detector
+	 * @return Monte_Mail_Queue_Source_Detector
 	 */
 	public function source_detector() {
 		return $this->source_detector;
@@ -128,7 +130,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns interceptor dependency.
 	 *
-	 * @return WP_Mail_Queue_Interceptor
+	 * @return Monte_Mail_Queue_Interceptor
 	 */
 	public function interceptor() {
 		return $this->interceptor;
@@ -137,7 +139,7 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns worker dependency.
 	 *
-	 * @return WP_Mail_Queue_Worker
+	 * @return Monte_Mail_Queue_Worker
 	 */
 	public function worker() {
 		return $this->worker;
@@ -146,11 +148,11 @@ class WP_Mail_Queue_Plugin {
 	/**
 	 * Returns admin dependency.
 	 *
-	 * @return WP_Mail_Queue_Admin
+	 * @return Monte_Mail_Queue_Admin
 	 */
 	public function admin() {
-		if ( ! $this->admin instanceof WP_Mail_Queue_Admin ) {
-			$this->admin = new WP_Mail_Queue_Admin( $this->settings, $this->repository );
+		if ( ! $this->admin instanceof Monte_Mail_Queue_Admin ) {
+			$this->admin = new Monte_Mail_Queue_Admin( $this->settings, $this->repository );
 		}
 
 		return $this->admin;

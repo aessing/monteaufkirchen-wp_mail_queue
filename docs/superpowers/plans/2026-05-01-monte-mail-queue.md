@@ -40,7 +40,7 @@ Create `monte-mail-queue-throttle.php` with plugin metadata, constants, class in
 
 - [ ] **Step 2: Create settings class**
 
-Create `WP_Mail_Queue_Settings` with defaults for `rate_per_minute = 25`, `max_attempts = 3`, `queue_mode = all`, `allowed_plugins = email-users`, and `log_retention_days = 30`.
+Create `Monte_Mail_Queue_Settings` with defaults for `rate_per_minute = 25`, `max_attempts = 3`, `queue_mode = all`, `allowed_plugins = email-users`, and `log_retention_days = 30`.
 
 - [ ] **Step 3: Create installer class**
 
@@ -49,11 +49,11 @@ Create two custom tables using `dbDelta()`:
 - `{$wpdb->prefix}wmqt_queue`
 - `{$wpdb->prefix}wmqt_logs`
 
-Register cron schedule `wmqt_two_minutes` with interval `120`, schedule event `wmqt_process_queue`, and clear it on deactivation.
+Queue schema includes `next_attempt_at`, `status_next_attempt`, and `status_updated` for retry scheduling and stale-lock recovery. Register cron schedule `wmqt_two_minutes` with interval `120`, schedule event `wmqt_process_queue`, clear it on deactivation, and run a DB-version upgrade check during plugin bootstrap for ZIP updates.
 
 - [ ] **Step 4: Create plugin coordinator**
 
-Create `WP_Mail_Queue_Plugin` with `init()` that wires cron schedule registration and leaves room for later interceptor, worker, and admin classes.
+Create `Monte_Mail_Queue_Plugin` with `init()` that wires cron schedule registration and leaves room for later interceptor, worker, and admin classes.
 
 - [ ] **Step 5: Verify PHP syntax**
 
@@ -84,7 +84,7 @@ git commit --no-gpg-sign -m "feat: add plugin bootstrap and installer"
 
 - [ ] **Step 1: Create source detector**
 
-Create `WP_Mail_Queue_Source_Detector::detect()` that scans `debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS)` for `/wp-content/plugins/{slug}/` and returns the first slug that is not this plugin's own slug.
+Create `Monte_Mail_Queue_Source_Detector::detect()` that scans `debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS)` for `/wp-content/plugins/{slug}/` and returns the first slug that is not this plugin's own slug.
 
 - [ ] **Step 2: Create repository**
 
@@ -92,15 +92,17 @@ Create methods:
 
 - `enqueue(array $mail, string $source_plugin = ''): int`
 - `claim_batch(int $limit): array`
-- `mark_sent(int $id): void`
-- `mark_retry(int $id, string $error): void`
-- `mark_failed(int $id, string $error): void`
+- `mark_sent(int $id): bool`
+- `mark_retry(int $id, string $error, int $delay_seconds): bool`
+- `mark_failed(int $id, string $error): bool`
 - `log(int $queue_id, string $event_type, string $message, string $source_plugin = ''): void`
 - `counts(): array`
 - `queue_items(string $status = '', int $limit = 100): array`
 - `logs(int $limit = 100): array`
+- `purge_old_logs(): int`
+- `purge_old_queue_items(): int`
 
-Store `to`, `headers`, and `attachments` as JSON. Store `subject` and `message` as text fields.
+Store `to`, `headers`, and `attachments` as JSON. Store `subject` and `message` as text fields. Queue rows include `next_attempt_at` for retry backoff and indexes for `status,next_attempt_at,id` and `status,updated_at`.
 
 - [ ] **Step 3: Include and instantiate classes**
 
@@ -150,10 +152,13 @@ Create a `pre_wp_mail` callback that:
 Create cron callback for `wmqt_process_queue` that:
 
 - computes `$limit = max(1, rate_per_minute * 2)`
-- claims queued items into `processing`
+- claims eligible queued items into `processing`
+- stops before the PHP execution deadline by claiming one item at a time
 - replays each item with interceptor bypass enabled
 - marks sent when `wp_mail()` returns true
-- records retry or final failure when `wp_mail()` returns false or throws
+- records retry with exponential backoff or final failure when `wp_mail()` returns false or throws
+- logs missing attachment paths before replay
+- prunes old logs and completed queue rows according to retention
 
 - [ ] **Step 3: Wire hooks**
 
@@ -209,7 +214,7 @@ Render and save:
 - max retries
 - queue mode
 - allowed plugin slugs
-- log retention days
+- log and completed queue retention days
 
 Use nonce verification and sanitization.
 
@@ -219,7 +224,7 @@ Render a filterable queue table with ID, recipients, subject, source plugin, sta
 
 - [ ] **Step 5: Create Logs view**
 
-Render latest log entries with timestamp, event type, queue item ID, source plugin, and message.
+Render latest log entries with timestamp, event type, queue item ID, source plugin, related message details, and message.
 
 - [ ] **Step 6: Verify PHP syntax**
 
@@ -295,4 +300,4 @@ git commit --no-gpg-sign -m "docs: add plugin packaging artifact"
 
 - Spec coverage: covered interception, 120-second cron, configurable rate, logs, settings, queue, dashboard, source-plugin filtering, activation/deactivation, and packaging.
 - Placeholder scan: no placeholder tasks remain.
-- Type consistency: class names use `WP_Mail_Queue_*`; cron hook is consistently `wmqt_process_queue`; schedule name is consistently `wmqt_two_minutes`; table prefix is consistently `wmqt`.
+- Type consistency: class names use `Monte_Mail_Queue_*`; cron hook is consistently `wmqt_process_queue`; schedule name is consistently `wmqt_two_minutes`; table prefix is consistently `wmqt`.

@@ -4,7 +4,7 @@
 
 Build an uploadable WordPress plugin that intercepts mails sent through `wp_mail()`, stores them in a queue, and sends them later at a configurable throttled rate. The default rate is 25 mails per minute. The queue worker runs via WP-Cron every 120 seconds, matching the hosting environment where GoDaddy Managed WordPress triggers cron roughly every two minutes.
 
-Version 0.3.0 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
+Version 0.3.1 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
 
 The target delivery architecture is:
 
@@ -44,19 +44,19 @@ Each queue item has a status:
 - `sent`
 - `failed`
 
-The worker locks each item before sending by moving it to `processing`. Successful sends become `sent` and receive a sent timestamp. Failed sends become `failed` or return to `queued` depending on retry count.
+The worker locks each item before sending by moving it to `processing`. Successful sends become `sent` and receive a sent timestamp. Failed sends become `failed` or return to `queued` depending on retry count. State transitions from `processing` to `sent`, `failed`, or retry `queued` are guarded by `WHERE status = 'processing'` so a recovered or otherwise changed row cannot be resurrected by an older worker.
 
 If a worker request is killed after claiming rows, the next worker run recovers `processing` rows older than 15 minutes back to `queued` without incrementing attempts. The stale threshold is evaluated in SQL relative to the same WordPress-local datetime format stored in `updated_at`.
 
 ## Retry And Error Handling
 
-The plugin stores retry count, max retry count, last error, and timestamps for each queue item.
+The plugin stores retry count, max retry count, last error, `next_attempt_at`, and timestamps for each queue item.
 
-Default max retries is 3. If a send fails and retries remain, the item is returned to `queued`. If max retries is reached, the item remains `failed`.
+Default max retries is 3. If a send fails and retries remain, the item is returned to `queued` with exponential retry backoff. Queued rows are claimable only when `next_attempt_at` is empty or in the past. If max retries is reached, the item remains `failed`.
 
-Each attempt writes a log entry, including successful sends and failures.
+Each attempt writes a log entry, including successful sends and failures. If attachment file paths are missing when the worker replays a message, the worker logs an `attachment_missing` event before calling `wp_mail()`.
 
-The worker also prunes log rows older than the configured log retention setting. Default retention is 30 days.
+The worker also prunes log rows and completed queue rows (`sent` and `failed`) older than the configured log retention setting. Default retention is 30 days.
 
 ## Source Plugin Detection
 
@@ -92,6 +92,7 @@ Main fields:
 - max attempts
 - last error
 - queued timestamp
+- next attempt timestamp
 - updated timestamp
 - sent timestamp
 
@@ -129,9 +130,11 @@ The dashboard links to Settings, Queue, and Logs.
 The dashboard also includes:
 
 - a stacked 30-day mail volume chart
-- chart segments for `queued`, `processing`, `failed`, and `sent`
+- chart segments for queued volume, `processing`, `failed`, and `sent`
 - chart colors matching the status badges used in tables
 - an active queue preview showing up to 10 `queued` and `processing` entries below the chart
+
+Queued volume is bucketed by `queued_at` for all rows, so historical queued counts do not disappear after a message is sent. Sent rows are bucketed by `sent_at`, failed rows by final `updated_at`, and processing rows by latest `updated_at`.
 
 ## Settings View
 
@@ -141,7 +144,7 @@ Settings include:
 - max retries, default 3
 - queue mode: all mails or selected plugin slugs
 - allowed plugin slugs, default includes `email-users,send-users-email` but is only used in selected-plugin mode
-- log retention days, default 30
+- log and completed queue retention days, default 30
 
 The cron interval is fixed at 120 seconds for this version.
 
@@ -182,11 +185,11 @@ It supports event filtering and paginates results for large log tables. Sent and
 
 ## Activation And Deactivation
 
-On activation, the plugin creates or updates its custom tables and schedules the WP-Cron event.
+On activation, the plugin creates or updates its custom tables and schedules the WP-Cron event. On normal plugin load, it also checks a stored DB version and runs dbDelta when needed so ZIP updates can add columns and indexes without requiring manual deactivate/reactivate.
 
 On deactivation, it clears the scheduled WP-Cron event. It does not delete queue or log tables.
 
-On uninstall, the plugin removes its option, queue table, and log table.
+On uninstall, the plugin removes its options, queue table, and log table.
 
 ## Verification
 
@@ -199,11 +202,11 @@ Implementation should verify:
 - cron worker sends at most `rate_per_minute * 2` messages per run
 - worker replay bypasses interception so FluentSMTP can send
 - successful sends create log entries
-- failed sends retry and eventually become failed
+- failed sends retry with backoff and eventually become failed
 - selected-plugin mode queues only allowed source plugins
 - queue insert works under strict-mode MySQL
 - stale processing rows recover after timeout
-- log retention is enforced by worker runs
+- log and completed queue retention is enforced by worker runs
 - queue and log tables paginate in admin
 - dashboard chart renders 30 days of stacked status counts
 - dashboard active queue preview shows up to 10 entries

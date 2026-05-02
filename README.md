@@ -18,12 +18,13 @@ Built for WordPress sites that send bulk mail through providers with strict rate
 | Admin UI | Includes Dashboard, Settings, Queue, and Logs views. |
 | Reporting | Shows status cards, a stacked 30-day mail volume chart, paginated queue rows, and log history. |
 | Recovery | Requeues stale `processing` jobs after 15 minutes if a cron run is interrupted. |
+| Retention | Prunes old logs and completed queue rows using the configured retention window. |
 
 ## Current Version
 
-`0.3.0`
+`0.3.1`
 
-This release adds the polished admin dashboard, stacked 30-day status chart, improved queue and log tables, source plugin detection fixes, stricter database handling, log retention cleanup, and upload-ready packaging.
+This release adds queue retention cleanup, retry backoff, guarded state transitions, schema upgrade handling, the polished admin dashboard, stacked 30-day status chart, improved queue and log tables, source plugin detection fixes, stricter database handling, and upload-ready packaging.
 
 ## Architecture
 
@@ -59,7 +60,8 @@ Out of the box, the plugin:
 - Processes the queue every two minutes with WP-Cron.
 - Sends up to 25 mails per minute, which means up to 50 messages per worker run.
 - Retries failed messages up to 3 total attempts.
-- Keeps logs for 30 days by default.
+- Keeps logs and completed queue rows for 30 days by default.
+- Uses exponential retry backoff before a failed message is eligible for another send attempt.
 - Uses `email-users,send-users-email` as the default allowed plugin slug list when selected-plugin queueing is enabled.
 - Falls back to normal immediate delivery if queue insertion fails.
 
@@ -74,7 +76,7 @@ The plugin start screen gives administrators a clear operational overview:
 - Configured mails-per-minute rate.
 - Calculated batch size per two-minute cron run.
 - Next scheduled worker run.
-- Stacked 30-day chart for `queued`, `processing`, `failed`, and `sent`.
+- Stacked 30-day chart for queued volume plus `processing`, `failed`, and `sent` outcomes.
 - Active queue preview with at least 10 recent queue rows when available.
 
 ### Settings
@@ -106,7 +108,7 @@ The logs view is built for audit and diagnosis:
 - Supports event filtering.
 - Uses pagination for large log tables.
 - Keeps the same related message context as the queue view.
-- Includes events such as enqueue, claim, send success, retry, failure, recovery, and encode failures.
+- Includes events such as enqueue, claim, send success, retry, failure, recovery, missing attachments, and encode failures.
 
 ## FluentSMTP Notes
 
@@ -150,7 +152,7 @@ The plugin creates two custom tables using the site's WordPress table prefix:
 - `{prefix}wmqt_queue`
 - `{prefix}wmqt_logs`
 
-Deactivation clears the scheduled worker hook but keeps settings, queue rows, logs, and tables. Deleting the plugin through WordPress runs `uninstall.php`, which removes the option, queue table, and log table.
+Deactivation clears the scheduled worker hook but keeps settings, queue rows, logs, and tables. Worker runs prune old sent and failed queue rows according to log retention. Deleting the plugin through WordPress runs `uninstall.php`, which removes the plugin options, queue table, and log table.
 
 ## Upload Package
 

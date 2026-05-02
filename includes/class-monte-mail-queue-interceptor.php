@@ -12,25 +12,25 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Queues eligible wp_mail() payloads before WordPress sends them.
  */
-class WP_Mail_Queue_Interceptor {
+class Monte_Mail_Queue_Interceptor {
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Repository dependency.
 	 *
-	 * @var WP_Mail_Queue_Repository
+	 * @var Monte_Mail_Queue_Repository
 	 */
 	private $repository;
 
 	/**
 	 * Source detector dependency.
 	 *
-	 * @var WP_Mail_Queue_Source_Detector
+	 * @var Monte_Mail_Queue_Source_Detector
 	 */
 	private $source_detector;
 
@@ -44,14 +44,14 @@ class WP_Mail_Queue_Interceptor {
 	/**
 	 * Constructor.
 	 *
-	 * @param WP_Mail_Queue_Settings        $settings Settings dependency.
-	 * @param WP_Mail_Queue_Repository      $repository Repository dependency.
-	 * @param WP_Mail_Queue_Source_Detector $source_detector Source detector dependency.
+	 * @param Monte_Mail_Queue_Settings        $settings Settings dependency.
+	 * @param Monte_Mail_Queue_Repository      $repository Repository dependency.
+	 * @param Monte_Mail_Queue_Source_Detector $source_detector Source detector dependency.
 	 */
 	public function __construct(
-		WP_Mail_Queue_Settings $settings,
-		WP_Mail_Queue_Repository $repository,
-		WP_Mail_Queue_Source_Detector $source_detector
+		Monte_Mail_Queue_Settings $settings,
+		Monte_Mail_Queue_Repository $repository,
+		Monte_Mail_Queue_Source_Detector $source_detector
 	) {
 		$this->settings        = $settings;
 		$this->repository      = $repository;
@@ -102,9 +102,10 @@ class WP_Mail_Queue_Interceptor {
 		}
 
 		$mail          = $this->normalize_atts( is_array( $atts ) ? $atts : array() );
-		$source_plugin = $this->detect_source_plugin();
+		$queue_mode    = $this->queue_mode();
+		$source_plugin = 'selected' === $queue_mode ? $this->detect_source_plugin() : '';
 
-		if ( ! $this->should_queue( $source_plugin ) ) {
+		if ( ! $this->should_queue( $queue_mode, $source_plugin ) ) {
 			return null;
 		}
 
@@ -148,19 +149,25 @@ class WP_Mail_Queue_Interceptor {
 	}
 
 	/**
+	 * Returns the configured queue mode.
+	 *
+	 * @return string
+	 */
+	private function queue_mode() {
+		$queue_mode = sanitize_key( (string) $this->settings->get( 'queue_mode', 'all' ) );
+
+		return 'selected' === $queue_mode ? 'selected' : 'all';
+	}
+
+	/**
 	 * Determines whether a source plugin should be queued.
 	 *
+	 * @param string $queue_mode Queue mode.
 	 * @param string $source_plugin Source plugin slug.
 	 * @return bool
 	 */
-	private function should_queue( $source_plugin ) {
-		$queue_mode = sanitize_key( (string) $this->settings->get( 'queue_mode', 'all' ) );
-
+	private function should_queue( $queue_mode, $source_plugin ) {
 		if ( 'all' === $queue_mode ) {
-			return true;
-		}
-
-		if ( ! in_array( $queue_mode, array( 'selected', 'selected_plugins' ), true ) ) {
 			return true;
 		}
 

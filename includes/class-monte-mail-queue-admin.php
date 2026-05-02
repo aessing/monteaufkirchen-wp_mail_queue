@@ -12,21 +12,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Renders and handles plugin admin screens.
  */
-class WP_Mail_Queue_Admin {
+class Monte_Mail_Queue_Admin {
 	const MENU_SLUG = 'monte-mail-queue';
 	const PER_PAGE  = 50;
 
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Repository dependency.
 	 *
-	 * @var WP_Mail_Queue_Repository
+	 * @var Monte_Mail_Queue_Repository
 	 */
 	private $repository;
 
@@ -40,10 +40,10 @@ class WP_Mail_Queue_Admin {
 	/**
 	 * Constructor.
 	 *
-	 * @param WP_Mail_Queue_Settings   $settings Settings dependency.
-	 * @param WP_Mail_Queue_Repository $repository Repository dependency.
+	 * @param Monte_Mail_Queue_Settings   $settings Settings dependency.
+	 * @param Monte_Mail_Queue_Repository $repository Repository dependency.
 	 */
-	public function __construct( WP_Mail_Queue_Settings $settings, WP_Mail_Queue_Repository $repository ) {
+	public function __construct( Monte_Mail_Queue_Settings $settings, Monte_Mail_Queue_Repository $repository ) {
 		$this->settings   = $settings;
 		$this->repository = $repository;
 	}
@@ -263,7 +263,8 @@ class WP_Mail_Queue_Admin {
 
 		echo '</tbody></table>';
 		echo '</div>';
-		$this->render_pagination( 'monte-mail-queue-items', $paged, $total, array( 'status' => $status ) );
+		$pagination_args = 'active' === $status ? array() : array( 'status' => $status );
+		$this->render_pagination( 'monte-mail-queue-items', $paged, $total, $pagination_args );
 		echo '</div>';
 	}
 
@@ -380,7 +381,7 @@ class WP_Mail_Queue_Admin {
 		$max_total = max( 1, (int) ( $chart_data['max_total'] ?? 1 ) );
 		$totals    = isset( $chart_data['totals'] ) && is_array( $chart_data['totals'] ) ? $chart_data['totals'] : array();
 		$statuses  = array(
-			'queued'     => __( 'Queued', 'monte-mail-queue-throttle' ),
+			'queued'     => __( 'Queued volume', 'monte-mail-queue-throttle' ),
 			'processing' => __( 'Processing', 'monte-mail-queue-throttle' ),
 			'failed'     => __( 'Failed', 'monte-mail-queue-throttle' ),
 			'sent'       => __( 'Sent', 'monte-mail-queue-throttle' ),
@@ -390,7 +391,7 @@ class WP_Mail_Queue_Admin {
 		echo '<div class="wmqt-chart-header">';
 		echo '<div>';
 		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Daily queue outcomes use the same status colors as the tables.', 'monte-mail-queue-throttle' ) . '</p>';
+		echo '<p>' . esc_html__( 'Queued volume is bucketed by creation date; sent, failed, and processing reflect their latest state dates.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
 		echo '<div class="wmqt-chart-legend">';
 
@@ -587,6 +588,7 @@ class WP_Mail_Queue_Admin {
 			'recovered'      => __( 'Recovered', 'monte-mail-queue-throttle' ),
 			'encode_failed'  => __( 'Encode failed', 'monte-mail-queue-throttle' ),
 			'enqueue_failed' => __( 'Enqueue failed', 'monte-mail-queue-throttle' ),
+			'attachment_missing' => __( 'Attachment missing', 'monte-mail-queue-throttle' ),
 		);
 
 		echo '<form method="get" class="wmqt-filter">';
@@ -709,12 +711,12 @@ class WP_Mail_Queue_Admin {
 			return;
 		}
 
-		$query_args = array_filter(
-			array_merge( array( 'page' => $page_slug ), $args ),
-			static function ( $value ) {
-				return '' !== (string) $value && 'active' !== (string) $value;
-			}
-		);
+			$query_args = array_filter(
+				array_merge( array( 'page' => $page_slug ), $args ),
+				static function ( $value ) {
+					return '' !== (string) $value;
+				}
+			);
 		$base = add_query_arg( array_merge( $query_args, array( 'paged' => '%#%' ) ), admin_url( 'admin.php' ) );
 
 		echo '<div class="wmqt-pagination">';

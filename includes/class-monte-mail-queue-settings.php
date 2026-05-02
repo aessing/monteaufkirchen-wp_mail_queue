@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Reads and sanitizes plugin settings.
  */
-class WP_Mail_Queue_Settings {
+class Monte_Mail_Queue_Settings {
 	/**
 	 * Default plugin settings.
 	 *

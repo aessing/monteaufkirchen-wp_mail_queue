@@ -12,39 +12,42 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Processes queued mail in throttled batches.
  */
-class WP_Mail_Queue_Worker {
+class Monte_Mail_Queue_Worker {
+	const SOFT_DEADLINE_BUFFER = 5;
+	const FALLBACK_DEADLINE    = 110;
+
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Repository dependency.
 	 *
-	 * @var WP_Mail_Queue_Repository
+	 * @var Monte_Mail_Queue_Repository
 	 */
 	private $repository;
 
 	/**
 	 * Interceptor dependency.
 	 *
-	 * @var WP_Mail_Queue_Interceptor
+	 * @var Monte_Mail_Queue_Interceptor
 	 */
 	private $interceptor;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param WP_Mail_Queue_Settings    $settings Settings dependency.
-	 * @param WP_Mail_Queue_Repository  $repository Repository dependency.
-	 * @param WP_Mail_Queue_Interceptor $interceptor Interceptor dependency.
+	 * @param Monte_Mail_Queue_Settings    $settings Settings dependency.
+	 * @param Monte_Mail_Queue_Repository  $repository Repository dependency.
+	 * @param Monte_Mail_Queue_Interceptor $interceptor Interceptor dependency.
 	 */
 	public function __construct(
-		WP_Mail_Queue_Settings $settings,
-		WP_Mail_Queue_Repository $repository,
-		WP_Mail_Queue_Interceptor $interceptor
+		Monte_Mail_Queue_Settings $settings,
+		Monte_Mail_Queue_Repository $repository,
+		Monte_Mail_Queue_Interceptor $interceptor
 	) {
 		$this->settings    = $settings;
 		$this->repository  = $repository;
@@ -57,14 +60,23 @@ class WP_Mail_Queue_Worker {
 	 * @return void
 	 */
 	public function process_queue() {
-		$limit = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) * 2 );
-		$items = $this->repository->claim_batch( $limit );
+		$limit    = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) * 2 );
+		$deadline = $this->deadline_timestamp();
+		$sent     = 0;
 
-		foreach ( $items as $item ) {
-			$this->process_item( $item );
+		while ( $sent < $limit && time() < $deadline ) {
+			$items = $this->repository->claim_batch( 1 );
+
+			if ( empty( $items ) ) {
+				break;
+			}
+
+			$this->process_item( $items[0] );
+			$sent++;
 		}
 
 		$this->repository->purge_old_logs();
+		$this->repository->purge_old_queue_items();
 	}
 
 	/**
@@ -76,6 +88,11 @@ class WP_Mail_Queue_Worker {
 	private function process_item( array $item ) {
 		$id            = (int) ( $item['id'] ?? 0 );
 		$source_plugin = isset( $item['source_plugin'] ) ? sanitize_key( (string) $item['source_plugin'] ) : '';
+		$missing       = $this->missing_attachments( $item['attachments'] ?? array() );
+
+		if ( ! empty( $missing ) ) {
+			$this->repository->log( $id, 'attachment_missing', 'Attachment path no longer exists: ' . implode( ', ', $missing ), $source_plugin );
+		}
 
 		try {
 			$this->interceptor->enable_bypass();
@@ -89,8 +106,9 @@ class WP_Mail_Queue_Worker {
 			);
 
 			if ( true === $sent ) {
-				$this->repository->mark_sent( $id );
-				$this->repository->log( $id, 'sent', 'Mail sent successfully.', $source_plugin );
+				if ( $this->repository->mark_sent( $id ) ) {
+					$this->repository->log( $id, 'sent', 'Mail sent successfully.', $source_plugin );
+				}
 				return;
 			}
 
@@ -117,12 +135,65 @@ class WP_Mail_Queue_Worker {
 		$error         = '' !== (string) $error ? (string) $error : 'Unknown mail send failure.';
 
 		if ( $attempts + 1 >= $max_attempts ) {
-			$this->repository->mark_failed( $id, $error );
-			$this->repository->log( $id, 'failed', $error, $source_plugin );
+			if ( $this->repository->mark_failed( $id, $error ) ) {
+				$this->repository->log( $id, 'failed', $error, $source_plugin );
+			}
 			return;
 		}
 
-		$this->repository->mark_retry( $id, $error );
-		$this->repository->log( $id, 'retry', $error, $source_plugin );
+		if ( $this->repository->mark_retry( $id, $error, $this->retry_delay_seconds( $attempts + 1 ) ) ) {
+			$this->repository->log( $id, 'retry', $error, $source_plugin );
+		}
+	}
+
+	/**
+	 * Calculates the soft deadline for one worker request.
+	 *
+	 * @return int Unix timestamp.
+	 */
+	private function deadline_timestamp() {
+		$max_execution_time = (int) ini_get( 'max_execution_time' );
+
+		if ( 0 < $max_execution_time ) {
+			return time() + max( 1, $max_execution_time - self::SOFT_DEADLINE_BUFFER );
+		}
+
+		return time() + self::FALLBACK_DEADLINE;
+	}
+
+	/**
+	 * Calculates exponential retry backoff.
+	 *
+	 * @param int $attempt Attempt number being recorded.
+	 * @return int Delay in seconds.
+	 */
+	private function retry_delay_seconds( $attempt ) {
+		$attempt = max( 1, absint( $attempt ) );
+
+		return min( DAY_IN_SECONDS, 5 * MINUTE_IN_SECONDS * ( 2 ** ( $attempt - 1 ) ) );
+	}
+
+	/**
+	 * Returns attachment paths that no longer exist.
+	 *
+	 * @param mixed $attachments Attachment list.
+	 * @return string[]
+	 */
+	private function missing_attachments( $attachments ) {
+		if ( ! is_array( $attachments ) ) {
+			$attachments = array_filter( array_map( 'trim', explode( "\n", (string) $attachments ) ) );
+		}
+
+		$missing = array();
+
+		foreach ( $attachments as $attachment ) {
+			$path = is_string( $attachment ) ? $attachment : '';
+
+			if ( '' !== $path && ! file_exists( $path ) ) {
+				$missing[] = $path;
+			}
+		}
+
+		return $missing;
 	}
 }

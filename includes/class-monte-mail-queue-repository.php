@@ -12,20 +12,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Persists queued mail payloads and queue events.
  */
-class WP_Mail_Queue_Repository {
+class Monte_Mail_Queue_Repository {
 	/**
 	 * Settings dependency.
 	 *
-	 * @var WP_Mail_Queue_Settings
+	 * @var Monte_Mail_Queue_Settings
 	 */
 	private $settings;
 
 	/**
 	 * Constructor.
 	 *
-	 * @param WP_Mail_Queue_Settings $settings Settings dependency.
+	 * @param Monte_Mail_Queue_Settings $settings Settings dependency.
 	 */
-	public function __construct( WP_Mail_Queue_Settings $settings ) {
+	public function __construct( Monte_Mail_Queue_Settings $settings ) {
 		$this->settings = $settings;
 	}
 
@@ -89,10 +89,12 @@ class WP_Mail_Queue_Repository {
 
 		$this->recover_stale_processing_items();
 
-		$rows  = $wpdb->get_results(
+		$now  = current_time( 'mysql' );
+		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE status = %s ORDER BY id ASC LIMIT %d",
+				"SELECT * FROM {$table} WHERE status = %s AND (next_attempt_at IS NULL OR next_attempt_at <= %s) ORDER BY id ASC LIMIT %d",
 				'queued',
+				$now,
 				$limit
 			),
 			ARRAY_A
@@ -103,21 +105,16 @@ class WP_Mail_Queue_Repository {
 		}
 
 		$claimed = array();
-		$now     = current_time( 'mysql' );
 
 		foreach ( (array) $rows as $row ) {
-			$updated = $wpdb->update(
-				$this->queue_table(),
-				array(
-					'status'     => 'processing',
-					'updated_at' => $now,
-				),
-				array(
-					'id'     => (int) $row['id'],
-					'status' => 'queued',
-				),
-				array( '%s', '%s' ),
-				array( '%d', '%s' )
+			$updated = $wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, next_attempt_at = NULL, updated_at = %s WHERE id = %d AND status = %s",
+					'processing',
+					$now,
+					(int) $row['id'],
+					'queued'
+				)
 			);
 
 			if ( 1 === $updated ) {
@@ -178,25 +175,26 @@ class WP_Mail_Queue_Repository {
 	 * Marks a queue item as sent.
 	 *
 	 * @param int $id Queue item ID.
-	 * @return void
+	 * @return bool
 	 */
-	public function mark_sent( int $id ): void {
+	public function mark_sent( int $id ): bool {
 		global $wpdb;
 
-		$now = current_time( 'mysql' );
+		$table = $this->queue_table();
+		$now   = current_time( 'mysql' );
 
-		$wpdb->update(
-			$this->queue_table(),
-			array(
-				'status'     => 'sent',
-				'last_error' => null,
-				'updated_at' => $now,
-				'sent_at'    => $now,
-			),
-			array( 'id' => absint( $id ) ),
-			array( '%s', '%s', '%s', '%s' ),
-			array( '%d' )
+		$updated = $wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s, last_error = NULL, next_attempt_at = NULL, updated_at = %s, sent_at = %s WHERE id = %d AND status = %s",
+				'sent',
+				$now,
+				$now,
+				absint( $id ),
+				'processing'
+			)
 		);
+
+		return 1 === $updated;
 	}
 
 	/**
@@ -204,22 +202,31 @@ class WP_Mail_Queue_Repository {
 	 *
 	 * @param int    $id Queue item ID.
 	 * @param string $error Error message.
-	 * @return void
+	 * @param int    $delay_seconds Seconds before the next retry may be claimed.
+	 * @return bool
 	 */
-	public function mark_retry( int $id, string $error ): void {
+	public function mark_retry( int $id, string $error, int $delay_seconds ): bool {
 		global $wpdb;
 
-		$table = $this->queue_table();
+		$table           = $this->queue_table();
+		$now             = current_time( 'mysql' );
+		$next_attempt_at = current_datetime()
+			->modify( '+' . max( 60, absint( $delay_seconds ) ) . ' seconds' )
+			->format( 'Y-m-d H:i:s' );
 
-		$wpdb->query(
+		$updated = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = %s, attempts = attempts + 1, last_error = %s, updated_at = %s WHERE id = %d",
+				"UPDATE {$table} SET status = %s, attempts = attempts + 1, last_error = %s, next_attempt_at = %s, updated_at = %s WHERE id = %d AND status = %s",
 				'queued',
 				$error,
-				current_time( 'mysql' ),
-				absint( $id )
+				$next_attempt_at,
+				$now,
+				absint( $id ),
+				'processing'
 			)
 		);
+
+		return 1 === $updated;
 	}
 
 	/**
@@ -227,22 +234,25 @@ class WP_Mail_Queue_Repository {
 	 *
 	 * @param int    $id Queue item ID.
 	 * @param string $error Error message.
-	 * @return void
+	 * @return bool
 	 */
-	public function mark_failed( int $id, string $error ): void {
+	public function mark_failed( int $id, string $error ): bool {
 		global $wpdb;
 
 		$table = $this->queue_table();
 
-		$wpdb->query(
+		$updated = $wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET status = %s, attempts = attempts + 1, last_error = %s, updated_at = %s WHERE id = %d",
+				"UPDATE {$table} SET status = %s, attempts = attempts + 1, last_error = %s, next_attempt_at = NULL, updated_at = %s WHERE id = %d AND status = %s",
 				'failed',
 				$error,
 				current_time( 'mysql' ),
-				absint( $id )
+				absint( $id ),
+				'processing'
 			)
 		);
+
+		return 1 === $updated;
 	}
 
 	/**
@@ -330,12 +340,16 @@ class WP_Mail_Queue_Repository {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"(SELECT DATE(queued_at) AS day, status, COUNT(*) AS total FROM {$queue} WHERE status IN (%s, %s) AND queued_at >= %s GROUP BY DATE(queued_at), status)
+				"(SELECT DATE(queued_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE queued_at >= %s GROUP BY DATE(queued_at))
+				UNION ALL
+				(SELECT DATE(updated_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND updated_at >= %s GROUP BY DATE(updated_at))
 				UNION ALL
 				(SELECT DATE(updated_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND updated_at >= %s GROUP BY DATE(updated_at))
 				UNION ALL
 				(SELECT DATE(sent_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND sent_at IS NOT NULL AND sent_at >= %s GROUP BY DATE(sent_at))",
 				'queued',
+				$start . ' 00:00:00',
+				'processing',
 				'processing',
 				$start . ' 00:00:00',
 				'failed',
@@ -520,6 +534,30 @@ class WP_Mail_Queue_Repository {
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$table} WHERE created_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				current_time( 'mysql' ),
+				$days
+			)
+		);
+
+		return false === $deleted ? 0 : (int) $deleted;
+	}
+
+	/**
+	 * Deletes old completed queue rows according to configured retention.
+	 *
+	 * @return int Deleted row count.
+	 */
+	public function purge_old_queue_items(): int {
+		global $wpdb;
+
+		$days  = max( 1, absint( $this->settings->get( 'log_retention_days', 30 ) ) );
+		$table = $this->queue_table();
+
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE status IN (%s, %s) AND updated_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				'sent',
+				'failed',
 				current_time( 'mysql' ),
 				$days
 			)

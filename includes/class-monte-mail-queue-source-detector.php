@@ -12,15 +12,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Finds likely source plugin slugs from the current call stack.
  */
-class WP_Mail_Queue_Source_Detector {
+class Monte_Mail_Queue_Source_Detector {
 	/**
 	 * Detects the first plugin slug in the backtrace that is not this plugin.
 	 *
 	 * @return string
 	 */
-	public static function detect() {
-		$own_slugs     = self::own_slugs();
-		$ignored_slugs = self::ignored_source_slugs();
+	public function detect() {
+		$own_slugs     = $this->own_slugs();
+		$ignored_slugs = $this->ignored_source_slugs();
 		$trace         = debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS );
 
 		foreach ( $trace as $frame ) {
@@ -28,7 +28,7 @@ class WP_Mail_Queue_Source_Detector {
 				continue;
 			}
 
-			$slug = self::slug_from_path( $frame['file'] );
+			$slug = $this->slug_from_path( $frame['file'] );
 
 			if ( '' !== $slug && ! in_array( $slug, $own_slugs, true ) && ! in_array( $slug, $ignored_slugs, true ) ) {
 				return $slug;
@@ -43,7 +43,7 @@ class WP_Mail_Queue_Source_Detector {
 	 *
 	 * @return string[]
 	 */
-	private static function own_slugs() {
+	private function own_slugs() {
 		$slugs = array();
 
 		if ( defined( 'WMQT_PLUGIN_FILE' ) ) {
@@ -75,7 +75,7 @@ class WP_Mail_Queue_Source_Detector {
 	 *
 	 * @return string[]
 	 */
-	private static function ignored_source_slugs() {
+	private function ignored_source_slugs() {
 		$slugs = array( 'fluent-smtp' );
 
 		if ( function_exists( 'apply_filters' ) ) {
@@ -97,7 +97,7 @@ class WP_Mail_Queue_Source_Detector {
 	 * @param string $path File path.
 	 * @return string
 	 */
-	private static function slug_from_path( $path ) {
+	private function slug_from_path( $path ) {
 		$path = wp_normalize_path( $path );
 
 		if ( ! preg_match( '#/wp-content/plugins/([^/]+)/#', $path, $matches ) ) {

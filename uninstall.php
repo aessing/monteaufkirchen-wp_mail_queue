@@ -12,6 +12,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 global $wpdb;
 
 delete_option( 'wmqt_settings' );
+delete_option( 'wmqt_db_version' );
 wp_clear_scheduled_hook( 'wmqt_process_queue' );
 
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}wmqt_queue" );
