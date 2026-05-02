@@ -4,7 +4,7 @@
 
 Build an uploadable WordPress plugin that intercepts mails sent through `wp_mail()`, stores them in a queue, and sends them later at a configurable throttled rate. The default rate is 25 mails per minute. The queue worker runs via WP-Cron every 120 seconds, matching the hosting environment where GoDaddy Managed WordPress triggers cron roughly every two minutes.
 
-Version 0.3.2 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
+Version 0.3.3 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
 
 The target delivery architecture is:
 
