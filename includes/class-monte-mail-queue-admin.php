@@ -1,8 +1,8 @@
 <?php
 /**
- * Admin views for WP Mail Queue Throttle.
+ * Admin views for Monte Mail Queue Throttle.
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Renders and handles plugin admin screens.
  */
 class WP_Mail_Queue_Admin {
-	const MENU_SLUG = 'wp-mail-queue';
+	const MENU_SLUG = 'monte-mail-queue';
 	const PER_PAGE  = 50;
 
 	/**
@@ -65,8 +65,8 @@ class WP_Mail_Queue_Admin {
 	 */
 	public function register_menu() {
 		$this->page_hooks[ add_menu_page(
-			__( 'Mail Queue', 'wp-mail-queue-throttle' ),
-			__( 'Mail Queue', 'wp-mail-queue-throttle' ),
+			__( 'Mail Queue', 'monte-mail-queue-throttle' ),
+			__( 'Mail Queue', 'monte-mail-queue-throttle' ),
 			'manage_options',
 			self::MENU_SLUG,
 			array( $this, 'render_dashboard' ),
@@ -76,8 +76,8 @@ class WP_Mail_Queue_Admin {
 
 		$this->page_hooks[ add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Dashboard', 'wp-mail-queue-throttle' ),
-			__( 'Dashboard', 'wp-mail-queue-throttle' ),
+			__( 'Dashboard', 'monte-mail-queue-throttle' ),
+			__( 'Dashboard', 'monte-mail-queue-throttle' ),
 			'manage_options',
 			self::MENU_SLUG,
 			array( $this, 'render_dashboard' )
@@ -85,28 +85,28 @@ class WP_Mail_Queue_Admin {
 
 		$this->page_hooks[ add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Settings', 'wp-mail-queue-throttle' ),
-			__( 'Settings', 'wp-mail-queue-throttle' ),
+			__( 'Settings', 'monte-mail-queue-throttle' ),
+			__( 'Settings', 'monte-mail-queue-throttle' ),
 			'manage_options',
-			'wp-mail-queue-settings',
+			'monte-mail-queue-settings',
 			array( $this, 'render_settings' )
 		) ] = true;
 
 		$this->page_hooks[ add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Queue', 'wp-mail-queue-throttle' ),
-			__( 'Queue', 'wp-mail-queue-throttle' ),
+			__( 'Queue', 'monte-mail-queue-throttle' ),
+			__( 'Queue', 'monte-mail-queue-throttle' ),
 			'manage_options',
-			'wp-mail-queue-items',
+			'monte-mail-queue-items',
 			array( $this, 'render_queue' )
 		) ] = true;
 
 		$this->page_hooks[ add_submenu_page(
 			self::MENU_SLUG,
-			__( 'Logs', 'wp-mail-queue-throttle' ),
-			__( 'Logs', 'wp-mail-queue-throttle' ),
+			__( 'Logs', 'monte-mail-queue-throttle' ),
+			__( 'Logs', 'monte-mail-queue-throttle' ),
 			'manage_options',
-			'wp-mail-queue-logs',
+			'monte-mail-queue-logs',
 			array( $this, 'render_logs' )
 		) ] = true;
 	}
@@ -123,7 +123,7 @@ class WP_Mail_Queue_Admin {
 		}
 
 		wp_enqueue_style(
-			'wp-mail-queue-admin',
+			'monte-mail-queue-admin',
 			WMQT_PLUGIN_URL . 'assets/admin.css',
 			array(),
 			WMQT_VERSION
@@ -137,7 +137,7 @@ class WP_Mail_Queue_Admin {
 	 */
 	public function render_dashboard() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
 		$counts        = $this->repository->counts();
@@ -149,21 +149,21 @@ class WP_Mail_Queue_Admin {
 		$active_total  = $this->repository->queue_items_count( 'active' );
 		$active_items  = $this->repository->queue_items( 'active', 10 );
 		$cards         = array(
-			array( __( 'Queued', 'wp-mail-queue-throttle' ), (int) ( $counts['queued'] ?? 0 ) ),
-			array( __( 'Processing', 'wp-mail-queue-throttle' ), (int) ( $counts['processing'] ?? 0 ) ),
-			array( __( 'Sent', 'wp-mail-queue-throttle' ), (int) ( $counts['sent'] ?? 0 ) ),
-			array( __( 'Failed', 'wp-mail-queue-throttle' ), (int) ( $counts['failed'] ?? 0 ) ),
-			array( __( 'Configured rate', 'wp-mail-queue-throttle' ), sprintf( _n( '%d mail/min', '%d mails/min', $rate, 'wp-mail-queue-throttle' ), $rate ) ),
-			array( __( 'Per-run limit', 'wp-mail-queue-throttle' ), $per_run_limit ),
-			array( __( 'Next cron', 'wp-mail-queue-throttle' ), $this->format_timestamp( $next_cron ) ),
+			array( __( 'Queued', 'monte-mail-queue-throttle' ), (int) ( $counts['queued'] ?? 0 ) ),
+			array( __( 'Processing', 'monte-mail-queue-throttle' ), (int) ( $counts['processing'] ?? 0 ) ),
+			array( __( 'Sent', 'monte-mail-queue-throttle' ), (int) ( $counts['sent'] ?? 0 ) ),
+			array( __( 'Failed', 'monte-mail-queue-throttle' ), (int) ( $counts['failed'] ?? 0 ) ),
+			array( __( 'Configured rate', 'monte-mail-queue-throttle' ), sprintf( _n( '%d mail/min', '%d mails/min', $rate, 'monte-mail-queue-throttle' ), $rate ) ),
+			array( __( 'Per-run limit', 'monte-mail-queue-throttle' ), $per_run_limit ),
+			array( __( 'Next cron', 'monte-mail-queue-throttle' ), $this->format_timestamp( $next_cron ) ),
 		);
 
 		echo '<div class="wrap wmqt-admin">';
-		echo '<h1>' . esc_html__( 'Mail Queue Dashboard', 'wp-mail-queue-throttle' ) . '</h1>';
+		echo '<h1>' . esc_html__( 'Mail Queue Dashboard', 'monte-mail-queue-throttle' ) . '</h1>';
 		echo '<div class="wmqt-actions">';
-		$this->render_admin_link( 'wp-mail-queue-settings', __( 'Settings', 'wp-mail-queue-throttle' ) );
-		$this->render_admin_link( 'wp-mail-queue-items', __( 'Queue', 'wp-mail-queue-throttle' ) );
-		$this->render_admin_link( 'wp-mail-queue-logs', __( 'Logs', 'wp-mail-queue-throttle' ) );
+		$this->render_admin_link( 'monte-mail-queue-settings', __( 'Settings', 'monte-mail-queue-throttle' ) );
+		$this->render_admin_link( 'monte-mail-queue-items', __( 'Queue', 'monte-mail-queue-throttle' ) );
+		$this->render_admin_link( 'monte-mail-queue-logs', __( 'Logs', 'monte-mail-queue-throttle' ) );
 		echo '</div>';
 		echo '<div class="wmqt-card-grid">';
 
@@ -187,7 +187,7 @@ class WP_Mail_Queue_Admin {
 	 */
 	public function render_settings() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
 		if ( isset( $_POST['wmqt_settings_nonce'] ) ) {
@@ -197,18 +197,18 @@ class WP_Mail_Queue_Admin {
 		$settings = $this->settings->get_all();
 
 		echo '<div class="wrap wmqt-admin">';
-		echo '<h1>' . esc_html__( 'Mail Queue Settings', 'wp-mail-queue-throttle' ) . '</h1>';
+		echo '<h1>' . esc_html__( 'Mail Queue Settings', 'monte-mail-queue-throttle' ) . '</h1>';
 		settings_errors( 'wmqt_messages' );
 		echo '<form method="post" action="">';
 		wp_nonce_field( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 		echo '<table class="form-table" role="presentation"><tbody>';
-		$this->render_number_field( 'rate_per_minute', __( 'Mails per minute', 'wp-mail-queue-throttle' ), $settings['rate_per_minute'] ?? 25 );
-		$this->render_number_field( 'max_attempts', __( 'Max retries', 'wp-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
+		$this->render_number_field( 'rate_per_minute', __( 'Mails per minute', 'monte-mail-queue-throttle' ), $settings['rate_per_minute'] ?? 25 );
+		$this->render_number_field( 'max_attempts', __( 'Max retries', 'monte-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
-		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'wp-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
-		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'wp-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30 );
+		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
+		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30 );
 		echo '</tbody></table>';
-		submit_button( __( 'Save Settings', 'wp-mail-queue-throttle' ) );
+		submit_button( __( 'Save Settings', 'monte-mail-queue-throttle' ) );
 		echo '</form>';
 		echo '</div>';
 	}
@@ -220,7 +220,7 @@ class WP_Mail_Queue_Admin {
 	 */
 	public function render_queue() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
 		$status = $this->requested_queue_status();
@@ -231,10 +231,10 @@ class WP_Mail_Queue_Admin {
 		echo '<div class="wrap wmqt-admin">';
 		echo '<div class="wmqt-page-header">';
 		echo '<div>';
-		echo '<h1>' . esc_html__( 'Mail Queue', 'wp-mail-queue-throttle' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Active queued and processing messages. Sent and failed history lives in Logs.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '<h1>' . esc_html__( 'Mail Queue', 'monte-mail-queue-throttle' ) . '</h1>';
+		echo '<p>' . esc_html__( 'Active queued and processing messages. Sent and failed history lives in Logs.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
-		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d item', '%d items', $total, 'wp-mail-queue-throttle' ), $total ) ) . '</span>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d item', '%d items', $total, 'monte-mail-queue-throttle' ), $total ) ) . '</span>';
 		echo '</div>';
 		$this->render_queue_status_filter( $status );
 		echo '<div class="wmqt-table-shell">';
@@ -244,7 +244,7 @@ class WP_Mail_Queue_Admin {
 		echo '</tr></thead><tbody>';
 
 		if ( empty( $items ) ) {
-			echo '<tr><td colspan="9"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
+			echo '<tr><td colspan="9"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'monte-mail-queue-throttle' ) . '</div></td></tr>';
 		}
 
 		foreach ( $items as $item ) {
@@ -263,7 +263,7 @@ class WP_Mail_Queue_Admin {
 
 		echo '</tbody></table>';
 		echo '</div>';
-		$this->render_pagination( 'wp-mail-queue-items', $paged, $total, array( 'status' => $status ) );
+		$this->render_pagination( 'monte-mail-queue-items', $paged, $total, array( 'status' => $status ) );
 		echo '</div>';
 	}
 
@@ -274,7 +274,7 @@ class WP_Mail_Queue_Admin {
 	 */
 	public function render_logs() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'wp-mail-queue-throttle' ) );
+			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
 		$event_type = $this->requested_event_type();
@@ -285,10 +285,10 @@ class WP_Mail_Queue_Admin {
 		echo '<div class="wrap wmqt-admin">';
 		echo '<div class="wmqt-page-header">';
 		echo '<div>';
-		echo '<h1>' . esc_html__( 'Mail Queue Logs', 'wp-mail-queue-throttle' ) . '</h1>';
-		echo '<p>' . esc_html__( 'Delivery events with the related message details.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '<h1>' . esc_html__( 'Mail Queue Logs', 'monte-mail-queue-throttle' ) . '</h1>';
+		echo '<p>' . esc_html__( 'Delivery events with the related message details.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
-		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d event', '%d events', $total, 'wp-mail-queue-throttle' ), $total ) ) . '</span>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d event', '%d events', $total, 'monte-mail-queue-throttle' ), $total ) ) . '</span>';
 		echo '</div>';
 		$this->render_log_filter( $event_type );
 		echo '<div class="wmqt-table-shell">';
@@ -298,7 +298,7 @@ class WP_Mail_Queue_Admin {
 		echo '</tr></thead><tbody>';
 
 		if ( empty( $logs ) ) {
-			echo '<tr><td colspan="12"><div class="wmqt-empty">' . esc_html__( 'No log entries found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
+			echo '<tr><td colspan="12"><div class="wmqt-empty">' . esc_html__( 'No log entries found.', 'monte-mail-queue-throttle' ) . '</div></td></tr>';
 		}
 
 		foreach ( $logs as $log ) {
@@ -320,7 +320,7 @@ class WP_Mail_Queue_Admin {
 
 		echo '</tbody></table>';
 		echo '</div>';
-		$this->render_pagination( 'wp-mail-queue-logs', $paged, $total, array( 'event_type' => $event_type ) );
+		$this->render_pagination( 'monte-mail-queue-logs', $paged, $total, array( 'event_type' => $event_type ) );
 		echo '</div>';
 	}
 
@@ -333,7 +333,7 @@ class WP_Mail_Queue_Admin {
 		check_admin_referer( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to save these settings.', 'wp-mail-queue-throttle' ) );
+			wp_die( esc_html__( 'You do not have permission to save these settings.', 'monte-mail-queue-throttle' ) );
 		}
 
 		$this->settings->update(
@@ -349,7 +349,7 @@ class WP_Mail_Queue_Admin {
 		add_settings_error(
 			'wmqt_messages',
 			'wmqt_settings_saved',
-			__( 'Settings saved.', 'wp-mail-queue-throttle' ),
+			__( 'Settings saved.', 'monte-mail-queue-throttle' ),
 			'updated'
 		);
 	}
@@ -380,17 +380,17 @@ class WP_Mail_Queue_Admin {
 		$max_total = max( 1, (int) ( $chart_data['max_total'] ?? 1 ) );
 		$totals    = isset( $chart_data['totals'] ) && is_array( $chart_data['totals'] ) ? $chart_data['totals'] : array();
 		$statuses  = array(
-			'queued'     => __( 'Queued', 'wp-mail-queue-throttle' ),
-			'processing' => __( 'Processing', 'wp-mail-queue-throttle' ),
-			'failed'     => __( 'Failed', 'wp-mail-queue-throttle' ),
-			'sent'       => __( 'Sent', 'wp-mail-queue-throttle' ),
+			'queued'     => __( 'Queued', 'monte-mail-queue-throttle' ),
+			'processing' => __( 'Processing', 'monte-mail-queue-throttle' ),
+			'failed'     => __( 'Failed', 'monte-mail-queue-throttle' ),
+			'sent'       => __( 'Sent', 'monte-mail-queue-throttle' ),
 		);
 
 		echo '<section class="wmqt-chart-card">';
 		echo '<div class="wmqt-chart-header">';
 		echo '<div>';
-		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'wp-mail-queue-throttle' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Daily queue outcomes use the same status colors as the tables.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Daily queue outcomes use the same status colors as the tables.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
 		echo '<div class="wmqt-chart-legend">';
 
@@ -406,7 +406,7 @@ class WP_Mail_Queue_Admin {
 
 		echo '</div>';
 		echo '</div>';
-		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail status chart for the last 30 days.', 'wp-mail-queue-throttle' ) . '">';
+		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail status chart for the last 30 days.', 'monte-mail-queue-throttle' ) . '">';
 		echo '<div class="wmqt-y-axis"><span>' . esc_html( (string) $max_total ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.66 ) ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.33 ) ) . '</span><span>0</span></div>';
 		echo '<div class="wmqt-plot">';
 
@@ -432,7 +432,7 @@ class WP_Mail_Queue_Admin {
 		}
 
 		echo '</div>';
-		echo '<div class="wmqt-x-axis"><span>' . esc_html__( '30d ago', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '24d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '18d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '12d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '6d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( 'Today', 'wp-mail-queue-throttle' ) . '</span></div>';
+		echo '<div class="wmqt-x-axis"><span>' . esc_html__( '30d ago', 'monte-mail-queue-throttle' ) . '</span><span>' . esc_html__( '24d', 'monte-mail-queue-throttle' ) . '</span><span>' . esc_html__( '18d', 'monte-mail-queue-throttle' ) . '</span><span>' . esc_html__( '12d', 'monte-mail-queue-throttle' ) . '</span><span>' . esc_html__( '6d', 'monte-mail-queue-throttle' ) . '</span><span>' . esc_html__( 'Today', 'monte-mail-queue-throttle' ) . '</span></div>';
 		echo '</div>';
 		echo '</section>';
 	}
@@ -448,10 +448,10 @@ class WP_Mail_Queue_Admin {
 		echo '<section class="wmqt-preview">';
 		echo '<div class="wmqt-page-header">';
 		echo '<div>';
-		echo '<h2>' . esc_html__( 'Active queue', 'wp-mail-queue-throttle' ) . '</h2>';
-		echo '<p>' . esc_html__( 'The next messages waiting for throttled delivery.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Active queue', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'The next messages waiting for throttled delivery.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
-		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d active item', '%d active items', (int) $total, 'wp-mail-queue-throttle' ), (int) $total ) ) . '</span>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d active item', '%d active items', (int) $total, 'monte-mail-queue-throttle' ), (int) $total ) ) . '</span>';
 		echo '</div>';
 		echo '<div class="wmqt-table-shell">';
 		echo '<table class="widefat wmqt-table wmqt-table-preview">';
@@ -460,7 +460,7 @@ class WP_Mail_Queue_Admin {
 		echo '</tr></thead><tbody>';
 
 		if ( empty( $items ) ) {
-			echo '<tr><td colspan="8"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
+			echo '<tr><td colspan="8"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'monte-mail-queue-throttle' ) . '</div></td></tr>';
 		}
 
 		foreach ( $items as $item ) {
@@ -479,7 +479,7 @@ class WP_Mail_Queue_Admin {
 		echo '</tbody></table>';
 		echo '</div>';
 		echo '<div class="wmqt-preview-footer">';
-		$this->render_admin_link( 'wp-mail-queue-items', __( 'Open full queue', 'wp-mail-queue-throttle' ) );
+		$this->render_admin_link( 'monte-mail-queue-items', __( 'Open full queue', 'monte-mail-queue-throttle' ) );
 		echo '</div>';
 		echo '</section>';
 	}
@@ -527,16 +527,16 @@ class WP_Mail_Queue_Admin {
 	private function render_queue_mode_field( $selected ) {
 		$selected = in_array( $selected, array( 'all', 'selected' ), true ) ? $selected : 'all';
 
-		echo '<tr><th scope="row">' . esc_html__( 'Queue mode', 'wp-mail-queue-throttle' ) . '</th><td><fieldset>';
+		echo '<tr><th scope="row">' . esc_html__( 'Queue mode', 'monte-mail-queue-throttle' ) . '</th><td><fieldset>';
 		printf(
 			'<label><input type="radio" name="queue_mode" value="all" %s> %s</label><br>',
 			checked( 'all', $selected, false ),
-			esc_html__( 'All mails', 'wp-mail-queue-throttle' )
+			esc_html__( 'All mails', 'monte-mail-queue-throttle' )
 		);
 		printf(
 			'<label><input type="radio" name="queue_mode" value="selected" %s> %s</label>',
 			checked( 'selected', $selected, false ),
-			esc_html__( 'Selected plugin slugs', 'wp-mail-queue-throttle' )
+			esc_html__( 'Selected plugin slugs', 'monte-mail-queue-throttle' )
 		);
 		echo '</fieldset></td></tr>';
 	}
@@ -549,14 +549,14 @@ class WP_Mail_Queue_Admin {
 	 */
 	private function render_queue_status_filter( $selected ) {
 		$statuses = array(
-			'active'     => __( 'Queued + processing', 'wp-mail-queue-throttle' ),
-			'queued'     => __( 'Queued', 'wp-mail-queue-throttle' ),
-			'processing' => __( 'Processing', 'wp-mail-queue-throttle' ),
+			'active'     => __( 'Queued + processing', 'monte-mail-queue-throttle' ),
+			'queued'     => __( 'Queued', 'monte-mail-queue-throttle' ),
+			'processing' => __( 'Processing', 'monte-mail-queue-throttle' ),
 		);
 
 		echo '<form method="get" class="wmqt-filter">';
-		echo '<input type="hidden" name="page" value="wp-mail-queue-items">';
-		echo '<label for="wmqt-status-filter">' . esc_html__( 'Status', 'wp-mail-queue-throttle' ) . '</label> ';
+		echo '<input type="hidden" name="page" value="monte-mail-queue-items">';
+		echo '<label for="wmqt-status-filter">' . esc_html__( 'Status', 'monte-mail-queue-throttle' ) . '</label> ';
 		echo '<select id="wmqt-status-filter" name="status">';
 		foreach ( $statuses as $status => $label ) {
 			printf(
@@ -567,7 +567,7 @@ class WP_Mail_Queue_Admin {
 			);
 		}
 		echo '</select> ';
-		submit_button( __( 'Filter', 'wp-mail-queue-throttle' ), 'secondary', '', false );
+		submit_button( __( 'Filter', 'monte-mail-queue-throttle' ), 'secondary', '', false );
 		echo '</form>';
 	}
 
@@ -579,19 +579,19 @@ class WP_Mail_Queue_Admin {
 	 */
 	private function render_log_filter( $selected ) {
 		$events = array(
-			''               => __( 'All events', 'wp-mail-queue-throttle' ),
-			'queued'         => __( 'Queued', 'wp-mail-queue-throttle' ),
-			'sent'           => __( 'Sent', 'wp-mail-queue-throttle' ),
-			'retry'          => __( 'Retry', 'wp-mail-queue-throttle' ),
-			'failed'         => __( 'Failed', 'wp-mail-queue-throttle' ),
-			'recovered'      => __( 'Recovered', 'wp-mail-queue-throttle' ),
-			'encode_failed'  => __( 'Encode failed', 'wp-mail-queue-throttle' ),
-			'enqueue_failed' => __( 'Enqueue failed', 'wp-mail-queue-throttle' ),
+			''               => __( 'All events', 'monte-mail-queue-throttle' ),
+			'queued'         => __( 'Queued', 'monte-mail-queue-throttle' ),
+			'sent'           => __( 'Sent', 'monte-mail-queue-throttle' ),
+			'retry'          => __( 'Retry', 'monte-mail-queue-throttle' ),
+			'failed'         => __( 'Failed', 'monte-mail-queue-throttle' ),
+			'recovered'      => __( 'Recovered', 'monte-mail-queue-throttle' ),
+			'encode_failed'  => __( 'Encode failed', 'monte-mail-queue-throttle' ),
+			'enqueue_failed' => __( 'Enqueue failed', 'monte-mail-queue-throttle' ),
 		);
 
 		echo '<form method="get" class="wmqt-filter">';
-		echo '<input type="hidden" name="page" value="wp-mail-queue-logs">';
-		echo '<label for="wmqt-event-filter">' . esc_html__( 'Event', 'wp-mail-queue-throttle' ) . '</label> ';
+		echo '<input type="hidden" name="page" value="monte-mail-queue-logs">';
+		echo '<label for="wmqt-event-filter">' . esc_html__( 'Event', 'monte-mail-queue-throttle' ) . '</label> ';
 		echo '<select id="wmqt-event-filter" name="event_type">';
 		foreach ( $events as $event => $label ) {
 			printf(
@@ -602,7 +602,7 @@ class WP_Mail_Queue_Admin {
 			);
 		}
 		echo '</select> ';
-		submit_button( __( 'Filter', 'wp-mail-queue-throttle' ), 'secondary', '', false );
+		submit_button( __( 'Filter', 'monte-mail-queue-throttle' ), 'secondary', '', false );
 		echo '</form>';
 	}
 
@@ -725,8 +725,8 @@ class WP_Mail_Queue_Admin {
 					'format'    => '',
 					'current'   => max( 1, (int) $paged ),
 					'total'     => $total_pages,
-					'prev_text' => __( 'Previous', 'wp-mail-queue-throttle' ),
-					'next_text' => __( 'Next', 'wp-mail-queue-throttle' ),
+					'prev_text' => __( 'Previous', 'monte-mail-queue-throttle' ),
+					'next_text' => __( 'Next', 'monte-mail-queue-throttle' ),
 				)
 			)
 		);
@@ -741,7 +741,7 @@ class WP_Mail_Queue_Admin {
 	 */
 	private function format_timestamp( $timestamp ) {
 		if ( ! $timestamp ) {
-			return __( 'Not scheduled', 'wp-mail-queue-throttle' );
+			return __( 'Not scheduled', 'monte-mail-queue-throttle' );
 		}
 
 		return date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), (int) $timestamp );

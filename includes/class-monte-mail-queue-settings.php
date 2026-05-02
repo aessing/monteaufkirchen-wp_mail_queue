@@ -1,8 +1,8 @@
 <?php
 /**
- * Settings persistence for WP Mail Queue Throttle.
+ * Settings persistence for Monte Mail Queue Throttle.
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: WP Mail Queue Throttle
+ * Plugin Name: Monte Mail Queue Throttle
  * Plugin URI: https://www.linkedin.com/in/aessing/
  * Description: Queues WordPress mail for throttled replay through the configured wp_mail transport.
  * Version: 0.3.0
@@ -9,9 +9,9 @@
  * Author: Andre Essing
  * Author URI: https://www.linkedin.com/in/aessing/
  * License: GPL-2.0-or-later
- * Text Domain: wp-mail-queue-throttle
+ * Text Domain: monte-mail-queue-throttle
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -26,14 +26,14 @@ define( 'WMQT_OPTION_NAME', 'wmqt_settings' );
 define( 'WMQT_CRON_SCHEDULE', 'wmqt_two_minutes' );
 define( 'WMQT_CRON_HOOK', 'wmqt_process_queue' );
 
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-settings.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-installer.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-repository.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-source-detector.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-interceptor.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-worker.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-admin.php';
-require_once WMQT_PLUGIN_DIR . 'includes/class-wp-mail-queue-plugin.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-settings.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-installer.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-repository.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-source-detector.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-interceptor.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-worker.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-admin.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-plugin.php';
 
 /**
  * Creates or updates plugin storage and schedules queue processing.

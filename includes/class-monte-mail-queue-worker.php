@@ -2,7 +2,7 @@
 /**
  * Cron worker for queued wp_mail() payloads.
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'ABSPATH' ) ) {

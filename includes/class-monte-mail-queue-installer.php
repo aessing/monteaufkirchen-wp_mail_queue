@@ -1,8 +1,8 @@
 <?php
 /**
- * Installer and lifecycle hooks for WP Mail Queue Throttle.
+ * Installer and lifecycle hooks for Monte Mail Queue Throttle.
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -61,7 +61,7 @@ class WP_Mail_Queue_Installer {
 		if ( ! isset( $schedules[ WMQT_CRON_SCHEDULE ] ) ) {
 			$schedules[ WMQT_CRON_SCHEDULE ] = array(
 				'interval' => 120,
-				'display'  => __( 'Every two minutes', 'wp-mail-queue-throttle' ),
+				'display'  => __( 'Every two minutes', 'monte-mail-queue-throttle' ),
 			);
 		}
 

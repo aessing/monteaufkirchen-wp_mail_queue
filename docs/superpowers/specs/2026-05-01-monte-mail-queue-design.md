@@ -1,4 +1,4 @@
-# WP Mail Queue Plugin Design
+# Monte Mail Queue Plugin Design
 
 ## Goal
 
@@ -8,7 +8,7 @@ Version 0.3.0 declares WordPress and PHP requirements in the plugin header, adds
 
 The target delivery architecture is:
 
-`WordPress/plugin -> WP Mail Queue Plugin -> throttled wp_mail() replay -> FluentSMTP -> mail provider`
+`WordPress/plugin -> Monte Mail Queue Plugin -> throttled wp_mail() replay -> FluentSMTP -> mail provider`
 
 ## Scope
 

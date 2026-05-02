@@ -1,8 +1,8 @@
 <?php
 /**
- * Uninstall cleanup for WP Mail Queue Throttle.
+ * Uninstall cleanup for Monte Mail Queue Throttle.
  *
- * @package WP_Mail_Queue_Throttle
+ * @package Monte_Mail_Queue_Throttle
  */
 
 if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {

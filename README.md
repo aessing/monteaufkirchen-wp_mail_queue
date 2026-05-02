@@ -1,8 +1,10 @@
-# WP Mail Queue Throttle
+# Monte Mail Queue Throttle
 
 A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the site's normal mail transport.
 
 Built for WordPress sites that send bulk mail through providers with strict rate limits, while keeping FluentSMTP or another SMTP plugin in the delivery path.
+
+![Monte Mail Queue Throttle comic illustration](assets/monte-mail-queue-comic.svg)
 
 ## Highlights
 
@@ -31,10 +33,10 @@ Default WordPress mail flow:
 WordPress or plugin -> wp_mail() -> FluentSMTP -> SMTP provider
 ```
 
-With WP Mail Queue Throttle:
+With Monte Mail Queue Throttle:
 
 ```text
-WordPress or plugin -> wp_mail() -> WP Mail Queue Throttle -> queued database row
+WordPress or plugin -> wp_mail() -> Monte Mail Queue Throttle -> queued database row
 WP-Cron worker -> wp_mail() replay -> FluentSMTP -> SMTP provider
 ```
 
@@ -42,8 +44,8 @@ During replay, the plugin enables an internal bypass so the worker's own `wp_mai
 
 ## Installation
 
-1. Upload `wp-mail-queue-throttle.zip` in WordPress under **Plugins > Add New > Upload Plugin**.
-2. Activate **WP Mail Queue Throttle**.
+1. Upload `monte-mail-queue-throttle.zip` in WordPress under **Plugins > Add New > Upload Plugin**.
+2. Activate **Monte Mail Queue Throttle**.
 3. Open **Mail Queue > Dashboard** and confirm the worker schedule is visible.
 4. Open **Mail Queue > Settings** and review the send rate, retry count, source mode, and log retention.
 
@@ -108,7 +110,7 @@ The logs view is built for audit and diagnosis:
 
 ## FluentSMTP Notes
 
-WP Mail Queue Throttle does not replace FluentSMTP. It controls when WordPress sends, then hands delivery back to the normal `wp_mail()` pipeline.
+Monte Mail Queue Throttle does not replace FluentSMTP. It controls when WordPress sends, then hands delivery back to the normal `wp_mail()` pipeline.
 
 Configure FluentSMTP first, then use this plugin to slow down the rate at which queued messages reach FluentSMTP. Attachments are stored and replayed as their original local WordPress file paths, so queued payloads should be treated as trusted internal mail data.
 
@@ -155,7 +157,7 @@ Deactivation clears the scheduled worker hook but keeps settings, queue rows, lo
 The repository includes an upload-ready ZIP:
 
 ```text
-wp-mail-queue-throttle.zip
+monte-mail-queue-throttle.zip
 ```
 
 Upload that file directly through the WordPress plugin installer.

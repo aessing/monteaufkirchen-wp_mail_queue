@@ -1,4 +1,4 @@
-# WP Mail Queue Implementation Plan
+# Monte Mail Queue Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,15 +12,15 @@
 
 ## File Structure
 
-- `wp-mail-queue-throttle.php`: Plugin header, constants, activation/deactivation hooks, bootstrap.
-- `includes/class-wp-mail-queue-plugin.php`: Main coordinator that wires hooks and dependencies.
-- `includes/class-wp-mail-queue-installer.php`: Database schema and cron schedule lifecycle.
-- `includes/class-wp-mail-queue-settings.php`: Option defaults, reads, validation, and updates.
-- `includes/class-wp-mail-queue-source-detector.php`: Source plugin detection via `debug_backtrace()`.
-- `includes/class-wp-mail-queue-repository.php`: Queue and log table persistence.
-- `includes/class-wp-mail-queue-interceptor.php`: `pre_wp_mail` handling and queue bypass during replay.
-- `includes/class-wp-mail-queue-worker.php`: Cron batch processing, retry handling, and replay.
-- `includes/class-wp-mail-queue-admin.php`: Admin menu, routing, view rendering, actions.
+- `monte-mail-queue-throttle.php`: Plugin header, constants, activation/deactivation hooks, bootstrap.
+- `includes/class-monte-mail-queue-plugin.php`: Main coordinator that wires hooks and dependencies.
+- `includes/class-monte-mail-queue-installer.php`: Database schema and cron schedule lifecycle.
+- `includes/class-monte-mail-queue-settings.php`: Option defaults, reads, validation, and updates.
+- `includes/class-monte-mail-queue-source-detector.php`: Source plugin detection via `debug_backtrace()`.
+- `includes/class-monte-mail-queue-repository.php`: Queue and log table persistence.
+- `includes/class-monte-mail-queue-interceptor.php`: `pre_wp_mail` handling and queue bypass during replay.
+- `includes/class-monte-mail-queue-worker.php`: Cron batch processing, retry handling, and replay.
+- `includes/class-monte-mail-queue-admin.php`: Admin menu, routing, view rendering, actions.
 - `assets/admin.css`: Minimal admin styling.
 - `README.md`: Installation and behavior notes.
 
@@ -29,14 +29,14 @@
 ### Task 1: Bootstrap And Installer
 
 **Files:**
-- Create: `wp-mail-queue-throttle.php`
-- Create: `includes/class-wp-mail-queue-installer.php`
-- Create: `includes/class-wp-mail-queue-plugin.php`
-- Create: `includes/class-wp-mail-queue-settings.php`
+- Create: `monte-mail-queue-throttle.php`
+- Create: `includes/class-monte-mail-queue-installer.php`
+- Create: `includes/class-monte-mail-queue-plugin.php`
+- Create: `includes/class-monte-mail-queue-settings.php`
 
 - [ ] **Step 1: Create plugin bootstrap**
 
-Create `wp-mail-queue-throttle.php` with plugin metadata, constants, class includes, activation/deactivation hooks, and `plugins_loaded` bootstrap.
+Create `monte-mail-queue-throttle.php` with plugin metadata, constants, class includes, activation/deactivation hooks, and `plugins_loaded` bootstrap.
 
 - [ ] **Step 2: Create settings class**
 
@@ -70,17 +70,17 @@ Expected: every file reports `No syntax errors detected`.
 Run:
 
 ```bash
-git add wp-mail-queue-throttle.php includes/class-wp-mail-queue-installer.php includes/class-wp-mail-queue-plugin.php includes/class-wp-mail-queue-settings.php
+git add monte-mail-queue-throttle.php includes/class-monte-mail-queue-installer.php includes/class-monte-mail-queue-plugin.php includes/class-monte-mail-queue-settings.php
 git commit --no-gpg-sign -m "feat: add plugin bootstrap and installer"
 ```
 
 ### Task 2: Queue Persistence And Source Detection
 
 **Files:**
-- Create: `includes/class-wp-mail-queue-repository.php`
-- Create: `includes/class-wp-mail-queue-source-detector.php`
-- Modify: `includes/class-wp-mail-queue-plugin.php`
-- Modify: `wp-mail-queue-throttle.php`
+- Create: `includes/class-monte-mail-queue-repository.php`
+- Create: `includes/class-monte-mail-queue-source-detector.php`
+- Modify: `includes/class-monte-mail-queue-plugin.php`
+- Modify: `monte-mail-queue-throttle.php`
 
 - [ ] **Step 1: Create source detector**
 
@@ -121,17 +121,17 @@ Expected: every file reports `No syntax errors detected`.
 Run:
 
 ```bash
-git add wp-mail-queue-throttle.php includes/class-wp-mail-queue-plugin.php includes/class-wp-mail-queue-repository.php includes/class-wp-mail-queue-source-detector.php
+git add monte-mail-queue-throttle.php includes/class-monte-mail-queue-plugin.php includes/class-monte-mail-queue-repository.php includes/class-monte-mail-queue-source-detector.php
 git commit --no-gpg-sign -m "feat: add queue repository and source detection"
 ```
 
 ### Task 3: Mail Interceptor And Cron Worker
 
 **Files:**
-- Create: `includes/class-wp-mail-queue-interceptor.php`
-- Create: `includes/class-wp-mail-queue-worker.php`
-- Modify: `includes/class-wp-mail-queue-plugin.php`
-- Modify: `wp-mail-queue-throttle.php`
+- Create: `includes/class-monte-mail-queue-interceptor.php`
+- Create: `includes/class-monte-mail-queue-worker.php`
+- Modify: `includes/class-monte-mail-queue-plugin.php`
+- Modify: `monte-mail-queue-throttle.php`
 
 - [ ] **Step 1: Create interceptor**
 
@@ -174,17 +174,17 @@ Expected: every file reports `No syntax errors detected`.
 Run:
 
 ```bash
-git add wp-mail-queue-throttle.php includes/class-wp-mail-queue-plugin.php includes/class-wp-mail-queue-interceptor.php includes/class-wp-mail-queue-worker.php
+git add monte-mail-queue-throttle.php includes/class-monte-mail-queue-plugin.php includes/class-monte-mail-queue-interceptor.php includes/class-monte-mail-queue-worker.php
 git commit --no-gpg-sign -m "feat: queue and process wp_mail messages"
 ```
 
 ### Task 4: Admin Views
 
 **Files:**
-- Create: `includes/class-wp-mail-queue-admin.php`
+- Create: `includes/class-monte-mail-queue-admin.php`
 - Create: `assets/admin.css`
-- Modify: `includes/class-wp-mail-queue-plugin.php`
-- Modify: `wp-mail-queue-throttle.php`
+- Modify: `includes/class-monte-mail-queue-plugin.php`
+- Modify: `monte-mail-queue-throttle.php`
 
 - [ ] **Step 1: Create admin menu**
 
@@ -236,7 +236,7 @@ Expected: every file reports `No syntax errors detected`.
 Run:
 
 ```bash
-git add wp-mail-queue-throttle.php includes/class-wp-mail-queue-plugin.php includes/class-wp-mail-queue-admin.php assets/admin.css
+git add monte-mail-queue-throttle.php includes/class-monte-mail-queue-plugin.php includes/class-monte-mail-queue-admin.php assets/admin.css
 git commit --no-gpg-sign -m "feat: add mail queue admin views"
 ```
 
@@ -244,7 +244,7 @@ git commit --no-gpg-sign -m "feat: add mail queue admin views"
 
 **Files:**
 - Create: `README.md`
-- Create: `wp-mail-queue-throttle.zip`
+- Create: `monte-mail-queue-throttle.zip`
 
 - [ ] **Step 1: Write README**
 
@@ -265,29 +265,29 @@ Expected: every file reports `No syntax errors detected`.
 Run:
 
 ```bash
-mkdir -p build/wp-mail-queue-throttle
-rsync -a --exclude='.git' --exclude='build' --exclude='docs' ./ build/wp-mail-queue-throttle/
-cd build && zip -r ../wp-mail-queue-throttle.zip wp-mail-queue-throttle
+mkdir -p build/monte-mail-queue-throttle
+rsync -a --exclude='.git' --exclude='build' --exclude='docs' ./ build/monte-mail-queue-throttle/
+cd build && zip -r ../monte-mail-queue-throttle.zip monte-mail-queue-throttle
 ```
 
-Expected: `wp-mail-queue-throttle.zip` exists and contains the plugin root folder.
+Expected: `monte-mail-queue-throttle.zip` exists and contains the plugin root folder.
 
 - [ ] **Step 4: Inspect ZIP contents**
 
 Run:
 
 ```bash
-unzip -l wp-mail-queue-throttle.zip
+unzip -l monte-mail-queue-throttle.zip
 ```
 
-Expected: includes `wp-mail-queue-throttle/wp-mail-queue-throttle.php`, `includes/`, `assets/`, and `README.md`.
+Expected: includes `monte-mail-queue-throttle/monte-mail-queue-throttle.php`, `includes/`, `assets/`, and `README.md`.
 
 - [ ] **Step 5: Commit**
 
 Run:
 
 ```bash
-git add README.md wp-mail-queue-throttle.zip
+git add README.md monte-mail-queue-throttle.zip
 git commit --no-gpg-sign -m "docs: add plugin packaging artifact"
 ```
 
