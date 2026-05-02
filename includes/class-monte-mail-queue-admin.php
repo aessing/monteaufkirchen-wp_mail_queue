@@ -13,8 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Renders and handles plugin admin screens.
  */
 class Monte_Mail_Queue_Admin {
-	const MENU_SLUG = 'monte-mail-queue';
-	const PER_PAGE  = 50;
+	const MENU_SLUG  = 'monte-mail-queue';
+	const PER_PAGE   = 50;
+	const CAPABILITY = 'edit_others_posts';
 
 	/**
 	 * Settings dependency.
@@ -67,7 +68,7 @@ class Monte_Mail_Queue_Admin {
 		$this->page_hooks[ add_menu_page(
 			__( 'Mail Queue', 'monte-mail-queue-throttle' ),
 			__( 'Mail Queue', 'monte-mail-queue-throttle' ),
-			'manage_options',
+			self::CAPABILITY,
 			self::MENU_SLUG,
 			array( $this, 'render_dashboard' ),
 			'dashicons-email-alt2',
@@ -78,7 +79,7 @@ class Monte_Mail_Queue_Admin {
 			self::MENU_SLUG,
 			__( 'Dashboard', 'monte-mail-queue-throttle' ),
 			__( 'Dashboard', 'monte-mail-queue-throttle' ),
-			'manage_options',
+			self::CAPABILITY,
 			self::MENU_SLUG,
 			array( $this, 'render_dashboard' )
 		) ] = true;
@@ -87,7 +88,7 @@ class Monte_Mail_Queue_Admin {
 			self::MENU_SLUG,
 			__( 'Settings', 'monte-mail-queue-throttle' ),
 			__( 'Settings', 'monte-mail-queue-throttle' ),
-			'manage_options',
+			self::CAPABILITY,
 			'monte-mail-queue-settings',
 			array( $this, 'render_settings' )
 		) ] = true;
@@ -96,7 +97,7 @@ class Monte_Mail_Queue_Admin {
 			self::MENU_SLUG,
 			__( 'Queue', 'monte-mail-queue-throttle' ),
 			__( 'Queue', 'monte-mail-queue-throttle' ),
-			'manage_options',
+			self::CAPABILITY,
 			'monte-mail-queue-items',
 			array( $this, 'render_queue' )
 		) ] = true;
@@ -105,7 +106,7 @@ class Monte_Mail_Queue_Admin {
 			self::MENU_SLUG,
 			__( 'Logs', 'monte-mail-queue-throttle' ),
 			__( 'Logs', 'monte-mail-queue-throttle' ),
-			'manage_options',
+			self::CAPABILITY,
 			'monte-mail-queue-logs',
 			array( $this, 'render_logs' )
 		) ] = true;
@@ -136,7 +137,7 @@ class Monte_Mail_Queue_Admin {
 	 * @return void
 	 */
 	public function render_dashboard() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -186,7 +187,7 @@ class Monte_Mail_Queue_Admin {
 	 * @return void
 	 */
 	public function render_settings() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -220,7 +221,7 @@ class Monte_Mail_Queue_Admin {
 	 * @return void
 	 */
 	public function render_queue() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -275,7 +276,7 @@ class Monte_Mail_Queue_Admin {
 	 * @return void
 	 */
 	public function render_logs() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -334,7 +335,7 @@ class Monte_Mail_Queue_Admin {
 	private function save_settings() {
 		check_admin_referer( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to save these settings.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -383,7 +384,7 @@ class Monte_Mail_Queue_Admin {
 		$max_total = max( 1, (int) ( $chart_data['max_total'] ?? 1 ) );
 		$totals    = isset( $chart_data['totals'] ) && is_array( $chart_data['totals'] ) ? $chart_data['totals'] : array();
 		$statuses  = array(
-			'queued'     => __( 'Queued volume', 'monte-mail-queue-throttle' ),
+			'queued'     => __( 'Queued', 'monte-mail-queue-throttle' ),
 			'processing' => __( 'Processing', 'monte-mail-queue-throttle' ),
 			'failed'     => __( 'Failed', 'monte-mail-queue-throttle' ),
 			'sent'       => __( 'Sent', 'monte-mail-queue-throttle' ),
@@ -392,8 +393,8 @@ class Monte_Mail_Queue_Admin {
 		echo '<section class="wmqt-chart-card">';
 		echo '<div class="wmqt-chart-header">';
 		echo '<div>';
-		echo '<h2>' . esc_html__( 'Mail activity, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Stacked activity counts: queued volume is bucketed by creation date; sent, failed, and processing reflect their latest state dates.', 'monte-mail-queue-throttle' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Each mail is counted once by its current status. Queued and processing rows are bucketed by their queued date; sent rows by sent date; failed rows by failure date.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
 		echo '<div class="wmqt-chart-legend">';
 
@@ -409,7 +410,7 @@ class Monte_Mail_Queue_Admin {
 
 		echo '</div>';
 		echo '</div>';
-		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail activity chart for the last 30 days.', 'monte-mail-queue-throttle' ) . '">';
+		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail volume chart for the last 30 days.', 'monte-mail-queue-throttle' ) . '">';
 		echo '<div class="wmqt-y-axis"><span>' . esc_html( (string) $max_total ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.66 ) ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.33 ) ) . '</span><span>0</span></div>';
 		echo '<div class="wmqt-plot">';
 

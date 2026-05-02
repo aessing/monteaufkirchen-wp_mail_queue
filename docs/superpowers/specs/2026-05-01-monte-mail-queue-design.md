@@ -4,7 +4,7 @@
 
 Build an uploadable WordPress plugin that intercepts mails sent through `wp_mail()`, stores them in a queue, and sends them later at a configurable throttled rate. The default rate is 25 mails per minute. The queue worker runs via WP-Cron every 120 seconds, matching the hosting environment where GoDaddy Managed WordPress triggers cron roughly every two minutes.
 
-Version 0.3.3 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
+Version 0.4.0 declares WordPress and PHP requirements in the plugin header, opens access to administrators and editors, ships the corrected dashboard chart, and keeps the uploadable ZIP as the release artifact.
 
 The target delivery architecture is:
 
@@ -113,6 +113,10 @@ Main fields:
 - source plugin slug
 - created timestamp
 
+## Access Control
+
+Admin pages, settings save, and queue/log views are gated on the `edit_others_posts` capability. By default this grants access to the WordPress administrator and editor roles, while excluding authors, contributors, and subscribers. The capability is centralized in a class constant so it can be filtered or replaced in a follow-up if a custom role is needed.
+
 ## Admin Dashboard
 
 The plugin start page shows operational status:
@@ -129,12 +133,12 @@ The dashboard links to Settings, Queue, and Logs.
 
 The dashboard also includes:
 
-- a stacked 30-day mail activity chart
-- chart segments for queued volume, `processing`, `failed`, and `sent`
+- a stacked 30-day mail volume chart
+- chart segments for `queued`, `processing`, `failed`, and `sent`
 - chart colors matching the status badges used in tables
 - an active queue preview showing up to 10 `queued` and `processing` entries below the chart
 
-Queued volume is bucketed by `queued_at` for all rows, so historical queued counts do not disappear after a message is sent. Sent rows are bucketed by `sent_at`, failed rows by final `updated_at`, and processing rows by latest `updated_at`. The chart is labeled as stacked activity because one message can contribute to multiple series over its lifecycle.
+Each mail is counted exactly once based on its current status, not on every status it passed through. Rows currently in `queued` or `processing` are bucketed by `queued_at`. Rows currently in `sent` are bucketed by `sent_at`. Rows currently in `failed` are bucketed by `updated_at` at time of final failure. A mail that was queued and sent on the same day appears once in the `sent` series for that day, not also in `queued`.
 
 ## Settings View
 
