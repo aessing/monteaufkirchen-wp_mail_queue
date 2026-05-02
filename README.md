@@ -4,7 +4,7 @@ A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, 
 
 Built for WordPress sites that send bulk mail through providers with strict rate limits, while keeping FluentSMTP or another SMTP plugin in the delivery path.
 
-![Monte Mail Queue Throttle comic illustration](assets/monte-mail-queue-comic.svg)
+![Monte Mail Queue Throttle comic illustration](assets/monte-mail-queue-comic.jpg)
 
 ## Highlights
 
