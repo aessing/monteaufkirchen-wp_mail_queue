@@ -22,7 +22,7 @@ Built for WordPress sites that send bulk mail through providers with strict rate
 
 ## Current Version
 
-`0.3.2`
+`0.3.3`
 
 This release adds separate queue retention cleanup, retry backoff, guarded state transitions, admin/cron schema upgrade handling, the polished admin dashboard, stacked 30-day activity chart, improved queue and log tables, source plugin detection fixes, stricter database handling, and upload-ready packaging.
 

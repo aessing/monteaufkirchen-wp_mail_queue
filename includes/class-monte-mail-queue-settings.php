@@ -19,12 +19,12 @@ class Monte_Mail_Queue_Settings {
 	 * @var array<string, mixed>
 	 */
 	private $defaults = array(
-		'rate_per_minute'   => 25,
-		'max_attempts'      => 3,
-		'queue_mode'        => 'all',
-		'allowed_plugins'   => 'email-users,send-users-email',
-			'log_retention_days'   => 30,
-			'queue_retention_days' => 180,
+		'rate_per_minute'      => 25,
+		'max_attempts'         => 3,
+		'queue_mode'           => 'all',
+		'allowed_plugins'      => 'email-users,send-users-email',
+		'log_retention_days'   => 30,
+		'queue_retention_days' => 180,
 	);
 
 	/**
@@ -107,13 +107,13 @@ class Monte_Mail_Queue_Settings {
 		}
 
 		return array(
-			'rate_per_minute'   => max( 1, absint( $settings['rate_per_minute'] ?? $this->defaults['rate_per_minute'] ) ),
-			'max_attempts'      => max( 1, absint( $settings['max_attempts'] ?? $this->defaults['max_attempts'] ) ),
-			'queue_mode'        => $queue_mode,
-			'allowed_plugins'   => $this->sanitize_allowed_plugins( $settings['allowed_plugins'] ?? $this->defaults['allowed_plugins'] ),
-				'log_retention_days'   => max( 1, absint( $settings['log_retention_days'] ?? $this->defaults['log_retention_days'] ) ),
-				'queue_retention_days' => max( 1, absint( $settings['queue_retention_days'] ?? $this->defaults['queue_retention_days'] ) ),
-			);
+			'rate_per_minute'      => max( 1, absint( $settings['rate_per_minute'] ?? $this->defaults['rate_per_minute'] ) ),
+			'max_attempts'         => max( 1, absint( $settings['max_attempts'] ?? $this->defaults['max_attempts'] ) ),
+			'queue_mode'           => $queue_mode,
+			'allowed_plugins'      => $this->sanitize_allowed_plugins( $settings['allowed_plugins'] ?? $this->defaults['allowed_plugins'] ),
+			'log_retention_days'   => max( 1, absint( $settings['log_retention_days'] ?? $this->defaults['log_retention_days'] ) ),
+			'queue_retention_days' => max( 1, absint( $settings['queue_retention_days'] ?? $this->defaults['queue_retention_days'] ) ),
+		);
 	}
 
 	/**

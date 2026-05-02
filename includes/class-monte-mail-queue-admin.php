@@ -206,8 +206,8 @@ class Monte_Mail_Queue_Admin {
 		$this->render_number_field( 'max_attempts', __( 'Max retries', 'monte-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
 		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
-		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30 );
-		$this->render_number_field( 'queue_retention_days', __( 'Completed queue retention days', 'monte-mail-queue-throttle' ), $settings['queue_retention_days'] ?? 180 );
+		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30, __( 'How long delivery event rows in the logs table are kept.', 'monte-mail-queue-throttle' ) );
+		$this->render_number_field( 'queue_retention_days', __( 'Completed queue retention days', 'monte-mail-queue-throttle' ), $settings['queue_retention_days'] ?? 180, __( 'Sent mails are pruned after this many days. Failed mails are always kept at least 365 days for audit.', 'monte-mail-queue-throttle' ) );
 		echo '</tbody></table>';
 		submit_button( __( 'Save Settings', 'monte-mail-queue-throttle' ) );
 		echo '</form>';
@@ -340,10 +340,10 @@ class Monte_Mail_Queue_Admin {
 
 		$this->settings->update(
 			array(
-				'rate_per_minute'   => isset( $_POST['rate_per_minute'] ) ? wp_unslash( $_POST['rate_per_minute'] ) : 25,
-				'max_attempts'      => isset( $_POST['max_attempts'] ) ? wp_unslash( $_POST['max_attempts'] ) : 3,
-				'queue_mode'        => isset( $_POST['queue_mode'] ) ? wp_unslash( $_POST['queue_mode'] ) : 'all',
-				'allowed_plugins'   => isset( $_POST['allowed_plugins'] ) ? wp_unslash( $_POST['allowed_plugins'] ) : '',
+				'rate_per_minute'      => isset( $_POST['rate_per_minute'] ) ? wp_unslash( $_POST['rate_per_minute'] ) : 25,
+				'max_attempts'         => isset( $_POST['max_attempts'] ) ? wp_unslash( $_POST['max_attempts'] ) : 3,
+				'queue_mode'           => isset( $_POST['queue_mode'] ) ? wp_unslash( $_POST['queue_mode'] ) : 'all',
+				'allowed_plugins'      => isset( $_POST['allowed_plugins'] ) ? wp_unslash( $_POST['allowed_plugins'] ) : '',
 				'log_retention_days'   => isset( $_POST['log_retention_days'] ) ? wp_unslash( $_POST['log_retention_days'] ) : 30,
 				'queue_retention_days' => isset( $_POST['queue_retention_days'] ) ? wp_unslash( $_POST['queue_retention_days'] ) : 180,
 			)
@@ -493,14 +493,18 @@ class Monte_Mail_Queue_Admin {
 	 * @param string $name Field name.
 	 * @param string $label Field label.
 	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
 	 * @return void
 	 */
-	private function render_number_field( $name, $label, $value ) {
+	private function render_number_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
 		printf(
-			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1" value="%3$s" class="small-text"></td></tr>',
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1" value="%3$s" class="small-text">%4$s</td></tr>',
 			esc_attr( $name ),
 			esc_html( $label ),
-			esc_attr( (string) max( 1, absint( $value ) ) )
+			esc_attr( (string) max( 1, absint( $value ) ) ),
+			$description_html
 		);
 	}
 
