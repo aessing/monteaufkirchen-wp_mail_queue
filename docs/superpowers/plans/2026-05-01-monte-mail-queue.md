@@ -40,7 +40,7 @@ Create `monte-mail-queue-throttle.php` with plugin metadata, constants, class in
 
 - [ ] **Step 2: Create settings class**
 
-Create `Monte_Mail_Queue_Settings` with defaults for `rate_per_minute = 25`, `max_attempts = 3`, `queue_mode = all`, `allowed_plugins = email-users`, and `log_retention_days = 30`.
+Create `Monte_Mail_Queue_Settings` with defaults for `rate_per_minute = 25`, `max_attempts = 3`, `queue_mode = all`, `allowed_plugins = email-users`, `log_retention_days = 30`, and `queue_retention_days = 180`.
 
 - [ ] **Step 3: Create installer class**
 
@@ -49,7 +49,7 @@ Create two custom tables using `dbDelta()`:
 - `{$wpdb->prefix}wmqt_queue`
 - `{$wpdb->prefix}wmqt_logs`
 
-Queue schema includes `next_attempt_at`, `status_next_attempt`, and `status_updated` for retry scheduling and stale-lock recovery. Register cron schedule `wmqt_two_minutes` with interval `120`, schedule event `wmqt_process_queue`, clear it on deactivation, and run a DB-version upgrade check during plugin bootstrap for ZIP updates.
+Queue schema includes `next_attempt_at`, `status_next_attempt`, and `status_updated` for retry scheduling and stale-lock recovery. Register cron schedule `wmqt_two_minutes` with interval `120`, schedule event `wmqt_process_queue`, clear it on deactivation, and run a DB-version upgrade check during admin and WP-Cron requests for ZIP updates.
 
 - [ ] **Step 4: Create plugin coordinator**
 
@@ -158,7 +158,7 @@ Create cron callback for `wmqt_process_queue` that:
 - marks sent when `wp_mail()` returns true
 - records retry with exponential backoff or final failure when `wp_mail()` returns false or throws
 - logs missing attachment paths before replay
-- prunes old logs and completed queue rows according to retention
+- prunes old logs and completed queue rows according to separate retention settings
 
 - [ ] **Step 3: Wire hooks**
 
@@ -214,7 +214,8 @@ Render and save:
 - max retries
 - queue mode
 - allowed plugin slugs
-- log and completed queue retention days
+- log retention days
+- completed queue retention days
 
 Use nonce verification and sanitization.
 

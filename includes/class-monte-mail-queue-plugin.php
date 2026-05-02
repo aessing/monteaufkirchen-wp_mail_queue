@@ -80,13 +80,16 @@ class Monte_Mail_Queue_Plugin {
 	 * @return void
 	 */
 	public function init() {
-		$this->installer->maybe_upgrade();
+		if ( wp_doing_cron() ) {
+			$this->installer->maybe_upgrade();
+		}
 
 		add_filter( 'cron_schedules', array( $this->installer, 'add_cron_schedule' ) );
 		add_filter( 'pre_wp_mail', array( $this->interceptor, 'pre_wp_mail' ), 10, 2 );
 		add_action( WMQT_CRON_HOOK, array( $this->worker, 'process_queue' ) );
 
 		if ( is_admin() ) {
+			add_action( 'admin_init', array( $this->installer, 'maybe_upgrade' ) );
 			$this->admin()->init();
 		}
 	}

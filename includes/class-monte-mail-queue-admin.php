@@ -207,6 +207,7 @@ class Monte_Mail_Queue_Admin {
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
 		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
 		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30 );
+		$this->render_number_field( 'queue_retention_days', __( 'Completed queue retention days', 'monte-mail-queue-throttle' ), $settings['queue_retention_days'] ?? 180 );
 		echo '</tbody></table>';
 		submit_button( __( 'Save Settings', 'monte-mail-queue-throttle' ) );
 		echo '</form>';
@@ -343,7 +344,8 @@ class Monte_Mail_Queue_Admin {
 				'max_attempts'      => isset( $_POST['max_attempts'] ) ? wp_unslash( $_POST['max_attempts'] ) : 3,
 				'queue_mode'        => isset( $_POST['queue_mode'] ) ? wp_unslash( $_POST['queue_mode'] ) : 'all',
 				'allowed_plugins'   => isset( $_POST['allowed_plugins'] ) ? wp_unslash( $_POST['allowed_plugins'] ) : '',
-				'log_retention_days' => isset( $_POST['log_retention_days'] ) ? wp_unslash( $_POST['log_retention_days'] ) : 30,
+				'log_retention_days'   => isset( $_POST['log_retention_days'] ) ? wp_unslash( $_POST['log_retention_days'] ) : 30,
+				'queue_retention_days' => isset( $_POST['queue_retention_days'] ) ? wp_unslash( $_POST['queue_retention_days'] ) : 180,
 			)
 		);
 
@@ -390,8 +392,8 @@ class Monte_Mail_Queue_Admin {
 		echo '<section class="wmqt-chart-card">';
 		echo '<div class="wmqt-chart-header">';
 		echo '<div>';
-		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
-		echo '<p>' . esc_html__( 'Queued volume is bucketed by creation date; sent, failed, and processing reflect their latest state dates.', 'monte-mail-queue-throttle' ) . '</p>';
+		echo '<h2>' . esc_html__( 'Mail activity, last 30 days', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Stacked activity counts: queued volume is bucketed by creation date; sent, failed, and processing reflect their latest state dates.', 'monte-mail-queue-throttle' ) . '</p>';
 		echo '</div>';
 		echo '<div class="wmqt-chart-legend">';
 
@@ -407,7 +409,7 @@ class Monte_Mail_Queue_Admin {
 
 		echo '</div>';
 		echo '</div>';
-		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail status chart for the last 30 days.', 'monte-mail-queue-throttle' ) . '">';
+		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail activity chart for the last 30 days.', 'monte-mail-queue-throttle' ) . '">';
 		echo '<div class="wmqt-y-axis"><span>' . esc_html( (string) $max_total ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.66 ) ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.33 ) ) . '</span><span>0</span></div>';
 		echo '<div class="wmqt-plot">';
 
@@ -639,7 +641,7 @@ class Monte_Mail_Queue_Admin {
 	private function requested_event_type() {
 		$event_type = isset( $_GET['event_type'] ) ? sanitize_key( wp_unslash( $_GET['event_type'] ) ) : '';
 
-		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed' ), true ) ? $event_type : '';
+		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed', 'attachment_missing' ), true ) ? $event_type : '';
 	}
 
 	/**

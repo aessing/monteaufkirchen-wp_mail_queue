@@ -87,8 +87,6 @@ class Monte_Mail_Queue_Repository {
 		$limit = max( 1, absint( $limit ) );
 		$table = $this->queue_table();
 
-		$this->recover_stale_processing_items();
-
 		$now  = current_time( 'mysql' );
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
@@ -132,7 +130,7 @@ class Monte_Mail_Queue_Repository {
 	 *
 	 * @return void
 	 */
-	private function recover_stale_processing_items(): void {
+	public function recover_stale_processing_items(): void {
 		global $wpdb;
 
 		$table   = $this->queue_table();
@@ -550,20 +548,29 @@ class Monte_Mail_Queue_Repository {
 	public function purge_old_queue_items(): int {
 		global $wpdb;
 
-		$days  = max( 1, absint( $this->settings->get( 'log_retention_days', 30 ) ) );
-		$table = $this->queue_table();
+		$sent_days   = max( 1, absint( $this->settings->get( 'queue_retention_days', 180 ) ) );
+		$failed_days = max( $sent_days, 365 );
+		$table       = $this->queue_table();
 
-		$deleted = $wpdb->query(
+		$sent_deleted = $wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$table} WHERE status IN (%s, %s) AND updated_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				"DELETE FROM {$table} WHERE status = %s AND updated_at < DATE_SUB(%s, INTERVAL %d DAY)",
 				'sent',
-				'failed',
 				current_time( 'mysql' ),
-				$days
+				$sent_days
 			)
 		);
 
-		return false === $deleted ? 0 : (int) $deleted;
+		$failed_deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE status = %s AND updated_at < DATE_SUB(%s, INTERVAL %d DAY)",
+				'failed',
+				current_time( 'mysql' ),
+				$failed_days
+			)
+		);
+
+		return ( false === $sent_deleted ? 0 : (int) $sent_deleted ) + ( false === $failed_deleted ? 0 : (int) $failed_deleted );
 	}
 
 	/**

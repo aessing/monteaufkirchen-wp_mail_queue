@@ -4,7 +4,7 @@
 
 Build an uploadable WordPress plugin that intercepts mails sent through `wp_mail()`, stores them in a queue, and sends them later at a configurable throttled rate. The default rate is 25 mails per minute. The queue worker runs via WP-Cron every 120 seconds, matching the hosting environment where GoDaddy Managed WordPress triggers cron roughly every two minutes.
 
-Version 0.3.1 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
+Version 0.3.2 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
 
 The target delivery architecture is:
 
@@ -56,7 +56,7 @@ Default max retries is 3. If a send fails and retries remain, the item is return
 
 Each attempt writes a log entry, including successful sends and failures. If attachment file paths are missing when the worker replays a message, the worker logs an `attachment_missing` event before calling `wp_mail()`.
 
-The worker also prunes log rows and completed queue rows (`sent` and `failed`) older than the configured log retention setting. Default retention is 30 days.
+The worker prunes log rows using `log_retention_days`, default 30 days. It prunes completed `sent` queue rows using `queue_retention_days`, default 180 days. Failed queue rows are retained for at least 365 days, even if completed queue retention is lower.
 
 ## Source Plugin Detection
 
@@ -129,12 +129,12 @@ The dashboard links to Settings, Queue, and Logs.
 
 The dashboard also includes:
 
-- a stacked 30-day mail volume chart
+- a stacked 30-day mail activity chart
 - chart segments for queued volume, `processing`, `failed`, and `sent`
 - chart colors matching the status badges used in tables
 - an active queue preview showing up to 10 `queued` and `processing` entries below the chart
 
-Queued volume is bucketed by `queued_at` for all rows, so historical queued counts do not disappear after a message is sent. Sent rows are bucketed by `sent_at`, failed rows by final `updated_at`, and processing rows by latest `updated_at`.
+Queued volume is bucketed by `queued_at` for all rows, so historical queued counts do not disappear after a message is sent. Sent rows are bucketed by `sent_at`, failed rows by final `updated_at`, and processing rows by latest `updated_at`. The chart is labeled as stacked activity because one message can contribute to multiple series over its lifecycle.
 
 ## Settings View
 
@@ -144,7 +144,7 @@ Settings include:
 - max retries, default 3
 - queue mode: all mails or selected plugin slugs
 - allowed plugin slugs, default includes `email-users,send-users-email` but is only used in selected-plugin mode
-- log and completed queue retention days, default 30
+- log retention days, default 30, and completed queue retention days, default 180
 
 The cron interval is fixed at 120 seconds for this version.
 
@@ -185,7 +185,7 @@ It supports event filtering and paginates results for large log tables. Sent and
 
 ## Activation And Deactivation
 
-On activation, the plugin creates or updates its custom tables and schedules the WP-Cron event. On normal plugin load, it also checks a stored DB version and runs dbDelta when needed so ZIP updates can add columns and indexes without requiring manual deactivate/reactivate.
+On activation, the plugin creates or updates its custom tables and schedules the WP-Cron event. On admin requests and WP-Cron requests, it also checks a stored DB version and runs dbDelta when needed so ZIP updates can add columns and indexes without requiring manual deactivate/reactivate. Normal frontend requests do not run dbDelta.
 
 On deactivation, it clears the scheduled WP-Cron event. It does not delete queue or log tables.
 
@@ -206,7 +206,7 @@ Implementation should verify:
 - selected-plugin mode queues only allowed source plugins
 - queue insert works under strict-mode MySQL
 - stale processing rows recover after timeout
-- log and completed queue retention is enforced by worker runs
+- log retention and completed queue retention are enforced by worker runs
 - queue and log tables paginate in admin
 - dashboard chart renders 30 days of stacked status counts
 - dashboard active queue preview shows up to 10 entries
