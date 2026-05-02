@@ -338,13 +338,14 @@ class Monte_Mail_Queue_Repository {
 
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"(SELECT DATE(queued_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE queued_at >= %s GROUP BY DATE(queued_at))
+				"(SELECT DATE(queued_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND queued_at >= %s GROUP BY DATE(queued_at))
 				UNION ALL
-				(SELECT DATE(updated_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND updated_at >= %s GROUP BY DATE(updated_at))
+				(SELECT DATE(queued_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND queued_at >= %s GROUP BY DATE(queued_at))
 				UNION ALL
 				(SELECT DATE(updated_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND updated_at >= %s GROUP BY DATE(updated_at))
 				UNION ALL
 				(SELECT DATE(sent_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND sent_at IS NOT NULL AND sent_at >= %s GROUP BY DATE(sent_at))",
+				'queued',
 				'queued',
 				$start . ' 00:00:00',
 				'processing',

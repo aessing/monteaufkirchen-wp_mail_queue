@@ -200,7 +200,7 @@ Create top-level menu `Mail Queue` with pages:
 - Queue
 - Logs
 
-Require `manage_options`.
+Require `edit_others_posts` so administrators and editors can access the plugin while authors and below cannot.
 
 - [ ] **Step 2: Create Dashboard view**
 
