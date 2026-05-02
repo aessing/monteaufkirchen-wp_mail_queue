@@ -4,7 +4,7 @@
 
 Build an uploadable WordPress plugin that intercepts mails sent through `wp_mail()`, stores them in a queue, and sends them later at a configurable throttled rate. The default rate is 25 mails per minute. The queue worker runs via WP-Cron every 120 seconds, matching the hosting environment where GoDaddy Managed WordPress triggers cron roughly every two minutes.
 
-Version 0.2.0 declares WordPress and PHP requirements in the plugin header and keeps the uploadable ZIP as the release artifact.
+Version 0.3.0 declares WordPress and PHP requirements in the plugin header, adds a dashboard chart, and keeps the uploadable ZIP as the release artifact.
 
 The target delivery architecture is:
 
@@ -126,6 +126,13 @@ The plugin start page shows operational status:
 
 The dashboard links to Settings, Queue, and Logs.
 
+The dashboard also includes:
+
+- a stacked 30-day mail volume chart
+- chart segments for `queued`, `processing`, `failed`, and `sent`
+- chart colors matching the status badges used in tables
+- an active queue preview showing up to 10 `queued` and `processing` entries below the chart
+
 ## Settings View
 
 Settings include:
@@ -198,3 +205,5 @@ Implementation should verify:
 - stale processing rows recover after timeout
 - log retention is enforced by worker runs
 - queue and log tables paginate in admin
+- dashboard chart renders 30 days of stacked status counts
+- dashboard active queue preview shows up to 10 entries

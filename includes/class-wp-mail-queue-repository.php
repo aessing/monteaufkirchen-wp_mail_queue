@@ -297,6 +297,80 @@ class WP_Mail_Queue_Repository {
 	}
 
 	/**
+	 * Returns daily queue status counts for the last N days.
+	 *
+	 * @param int $days Number of days to include.
+	 * @return array{days: array<int, array<string, mixed>>, max_total: int, totals: array<string, int>}
+	 */
+	public function daily_status_counts( int $days = 30 ): array {
+		global $wpdb;
+
+		$days      = min( 90, max( 1, absint( $days ) ) );
+		$today     = current_datetime();
+		$start     = $today->sub( new DateInterval( 'P' . ( $days - 1 ) . 'D' ) )->format( 'Y-m-d' );
+		$queue     = $this->queue_table();
+		$statuses  = array( 'queued', 'processing', 'failed', 'sent' );
+		$day_index = array();
+		$totals    = array_fill_keys( $statuses, 0 );
+		$max_total = 0;
+
+		for ( $i = $days - 1; $i >= 0; $i-- ) {
+			$day = current_datetime()->sub( new DateInterval( 'P' . $i . 'D' ) )->format( 'Y-m-d' );
+
+			$day_index[ $day ] = array(
+				'date'       => $day,
+				'label'      => date_i18n( 'M j', strtotime( $day . ' 00:00:00' ) ),
+				'queued'     => 0,
+				'processing' => 0,
+				'failed'     => 0,
+				'sent'       => 0,
+				'total'      => 0,
+			);
+		}
+
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"(SELECT DATE(queued_at) AS day, status, COUNT(*) AS total FROM {$queue} WHERE status IN (%s, %s) AND queued_at >= %s GROUP BY DATE(queued_at), status)
+				UNION ALL
+				(SELECT DATE(updated_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND updated_at >= %s GROUP BY DATE(updated_at))
+				UNION ALL
+				(SELECT DATE(sent_at) AS day, %s AS status, COUNT(*) AS total FROM {$queue} WHERE status = %s AND sent_at IS NOT NULL AND sent_at >= %s GROUP BY DATE(sent_at))",
+				'queued',
+				'processing',
+				$start . ' 00:00:00',
+				'failed',
+				'failed',
+				$start . ' 00:00:00',
+				'sent',
+				'sent',
+				$start . ' 00:00:00'
+			),
+			ARRAY_A
+		);
+
+		foreach ( (array) $rows as $row ) {
+			$day    = (string) ( $row['day'] ?? '' );
+			$status = sanitize_key( (string) ( $row['status'] ?? '' ) );
+			$total  = (int) ( $row['total'] ?? 0 );
+
+			if ( ! isset( $day_index[ $day ] ) || ! in_array( $status, $statuses, true ) ) {
+				continue;
+			}
+
+			$day_index[ $day ][ $status ] += $total;
+			$day_index[ $day ]['total']   += $total;
+			$totals[ $status ]            += $total;
+			$max_total                     = max( $max_total, (int) $day_index[ $day ]['total'] );
+		}
+
+		return array(
+			'days'      => array_values( $day_index ),
+			'max_total' => max( 1, $max_total ),
+			'totals'    => $totals,
+		);
+	}
+
+	/**
 	 * Returns recent queue items.
 	 *
 	 * @param string $status Optional status filter.

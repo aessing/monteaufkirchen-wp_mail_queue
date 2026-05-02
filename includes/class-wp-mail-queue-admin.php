@@ -145,6 +145,9 @@ class WP_Mail_Queue_Admin {
 		$rate          = max( 1, absint( $settings['rate_per_minute'] ?? 25 ) );
 		$per_run_limit = $rate * 2;
 		$next_cron     = wp_next_scheduled( WMQT_CRON_HOOK );
+		$chart_data    = $this->repository->daily_status_counts( 30 );
+		$active_total  = $this->repository->queue_items_count( 'active' );
+		$active_items  = $this->repository->queue_items( 'active', 10 );
 		$cards         = array(
 			array( __( 'Queued', 'wp-mail-queue-throttle' ), (int) ( $counts['queued'] ?? 0 ) ),
 			array( __( 'Processing', 'wp-mail-queue-throttle' ), (int) ( $counts['processing'] ?? 0 ) ),
@@ -172,6 +175,8 @@ class WP_Mail_Queue_Admin {
 		}
 
 		echo '</div>';
+		$this->render_volume_chart( $chart_data );
+		$this->render_dashboard_queue_preview( $active_items, $active_total );
 		echo '</div>';
 	}
 
@@ -362,6 +367,121 @@ class WP_Mail_Queue_Admin {
 			esc_url( admin_url( 'admin.php?page=' . $slug ) ),
 			esc_html( $label )
 		);
+	}
+
+	/**
+	 * Renders the 30-day stacked status chart.
+	 *
+	 * @param array<string, mixed> $chart_data Chart data from the repository.
+	 * @return void
+	 */
+	private function render_volume_chart( array $chart_data ) {
+		$days      = isset( $chart_data['days'] ) && is_array( $chart_data['days'] ) ? $chart_data['days'] : array();
+		$max_total = max( 1, (int) ( $chart_data['max_total'] ?? 1 ) );
+		$totals    = isset( $chart_data['totals'] ) && is_array( $chart_data['totals'] ) ? $chart_data['totals'] : array();
+		$statuses  = array(
+			'queued'     => __( 'Queued', 'wp-mail-queue-throttle' ),
+			'processing' => __( 'Processing', 'wp-mail-queue-throttle' ),
+			'failed'     => __( 'Failed', 'wp-mail-queue-throttle' ),
+			'sent'       => __( 'Sent', 'wp-mail-queue-throttle' ),
+		);
+
+		echo '<section class="wmqt-chart-card">';
+		echo '<div class="wmqt-chart-header">';
+		echo '<div>';
+		echo '<h2>' . esc_html__( 'Mail volume, last 30 days', 'wp-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'Daily queue outcomes use the same status colors as the tables.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '</div>';
+		echo '<div class="wmqt-chart-legend">';
+
+		foreach ( $statuses as $status => $label ) {
+			$total = (int) ( $totals[ $status ] ?? 0 );
+			printf(
+				'<span class="wmqt-legend-item"><span class="wmqt-dot wmqt-dot-%1$s"></span>%2$s <strong>%3$d</strong></span>',
+				esc_attr( $status ),
+				esc_html( $label ),
+				$total
+			);
+		}
+
+		echo '</div>';
+		echo '</div>';
+		echo '<div class="wmqt-chart" role="img" aria-label="' . esc_attr__( 'Stacked daily mail status chart for the last 30 days.', 'wp-mail-queue-throttle' ) . '">';
+		echo '<div class="wmqt-y-axis"><span>' . esc_html( (string) $max_total ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.66 ) ) . '</span><span>' . esc_html( (string) (int) round( $max_total * 0.33 ) ) . '</span><span>0</span></div>';
+		echo '<div class="wmqt-plot">';
+
+		foreach ( $days as $day ) {
+			$label = (string) ( $day['label'] ?? '' );
+			$total = (int) ( $day['total'] ?? 0 );
+
+			echo '<div class="wmqt-day" title="' . esc_attr( sprintf( '%s: %d total', $label, $total ) ) . '">';
+
+			foreach ( array( 'sent', 'queued', 'processing', 'failed' ) as $status ) {
+				$count  = (int) ( $day[ $status ] ?? 0 );
+				$height = 0 < $count ? max( 2, round( ( $count / $max_total ) * 100, 2 ) ) : 0;
+
+				printf(
+					'<span class="wmqt-series wmqt-series-%1$s" style="height:%2$s%%" title="%3$s"></span>',
+					esc_attr( $status ),
+					esc_attr( (string) $height ),
+					esc_attr( sprintf( '%s %s: %d', $label, $statuses[ $status ], $count ) )
+				);
+			}
+
+			echo '</div>';
+		}
+
+		echo '</div>';
+		echo '<div class="wmqt-x-axis"><span>' . esc_html__( '30d ago', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '24d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '18d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '12d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( '6d', 'wp-mail-queue-throttle' ) . '</span><span>' . esc_html__( 'Today', 'wp-mail-queue-throttle' ) . '</span></div>';
+		echo '</div>';
+		echo '</section>';
+	}
+
+	/**
+	 * Renders the dashboard active queue preview.
+	 *
+	 * @param array<int, array<string, mixed>> $items Active queue rows.
+	 * @param int                             $total Total active rows.
+	 * @return void
+	 */
+	private function render_dashboard_queue_preview( array $items, $total ) {
+		echo '<section class="wmqt-preview">';
+		echo '<div class="wmqt-page-header">';
+		echo '<div>';
+		echo '<h2>' . esc_html__( 'Active queue', 'wp-mail-queue-throttle' ) . '</h2>';
+		echo '<p>' . esc_html__( 'The next messages waiting for throttled delivery.', 'wp-mail-queue-throttle' ) . '</p>';
+		echo '</div>';
+		echo '<span class="wmqt-count-pill">' . esc_html( sprintf( _n( '%d active item', '%d active items', (int) $total, 'wp-mail-queue-throttle' ), (int) $total ) ) . '</span>';
+		echo '</div>';
+		echo '<div class="wmqt-table-shell">';
+		echo '<table class="widefat wmqt-table wmqt-table-preview">';
+		echo '<thead><tr>';
+		$this->render_table_headers( array( 'ID', 'Recipients', 'Subject', 'Source plugin', 'Status', 'Attempts', 'Queued', 'Last error' ) );
+		echo '</tr></thead><tbody>';
+
+		if ( empty( $items ) ) {
+			echo '<tr><td colspan="8"><div class="wmqt-empty">' . esc_html__( 'No active queue items found.', 'wp-mail-queue-throttle' ) . '</div></td></tr>';
+		}
+
+		foreach ( $items as $item ) {
+			echo '<tr>';
+			echo '<td>' . esc_html( (string) (int) ( $item['id'] ?? 0 ) ) . '</td>';
+			echo '<td class="wmqt-recipients">' . esc_html( $this->format_recipients( $item['to'] ?? array() ) ) . '</td>';
+			echo '<td class="wmqt-subject">' . esc_html( (string) ( $item['subject'] ?? '' ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $item['source_plugin'] ?? '' ) ) ) . '</td>';
+			echo '<td>' . $this->status_badge( (string) ( $item['status'] ?? '' ) ) . '</td>';
+			echo '<td>' . esc_html( (string) (int) ( $item['attempts'] ?? 0 ) ) . '</td>';
+			echo '<td>' . esc_html( $this->fallback_text( (string) ( $item['queued_at'] ?? '' ) ) ) . '</td>';
+			echo '<td class="wmqt-error">' . esc_html( $this->fallback_text( (string) ( $item['last_error'] ?? '' ) ) ) . '</td>';
+			echo '</tr>';
+		}
+
+		echo '</tbody></table>';
+		echo '</div>';
+		echo '<div class="wmqt-preview-footer">';
+		$this->render_admin_link( 'wp-mail-queue-items', __( 'Open full queue', 'wp-mail-queue-throttle' ) );
+		echo '</div>';
+		echo '</section>';
 	}
 
 	/**

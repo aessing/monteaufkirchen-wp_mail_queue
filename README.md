@@ -59,7 +59,7 @@ Created by [Andre Essing](https://www.linkedin.com/in/aessing/).
 
 The plugin adds a top-level **Mail Queue** admin menu for administrators with `manage_options`.
 
-- **Dashboard**: shows queue counts, configured send rate, per-run batch limit, and the next scheduled cron run.
+- **Dashboard**: shows queue counts, configured send rate, per-run batch limit, the next scheduled cron run, a stacked 30-day status chart, and a 10-row active queue preview.
 - **Settings**: configures mails per minute, max retries, queue mode, allowed plugin slugs, and log retention days.
 - **Queue**: lists active queued and processing messages by default, with recipients, subject, source plugin, status, attempts, errors, queued time, sent time, filtering, and pagination.
 - **Logs**: lists all queue events by default, with filters, pagination, and related mail details including recipients, subject, source plugin, queue status, attempts, errors, queued time, and sent time.
