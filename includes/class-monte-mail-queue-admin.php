@@ -13,9 +13,10 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Renders and handles plugin admin screens.
  */
 class Monte_Mail_Queue_Admin {
-	const MENU_SLUG  = 'monte-mail-queue';
-	const PER_PAGE   = 50;
-	const CAPABILITY = 'edit_others_posts';
+	const MENU_SLUG            = 'monte-mail-queue';
+	const PER_PAGE             = 50;
+	const CAPABILITY           = 'edit_others_posts';
+	const SETTINGS_CAPABILITY  = 'manage_options';
 
 	/**
 	 * Settings dependency.
@@ -88,7 +89,7 @@ class Monte_Mail_Queue_Admin {
 			self::MENU_SLUG,
 			__( 'Settings', 'monte-mail-queue-throttle' ),
 			__( 'Settings', 'monte-mail-queue-throttle' ),
-			self::CAPABILITY,
+			self::SETTINGS_CAPABILITY,
 			'monte-mail-queue-settings',
 			array( $this, 'render_settings' )
 		) ] = true;
@@ -162,7 +163,9 @@ class Monte_Mail_Queue_Admin {
 		echo '<div class="wrap wmqt-admin">';
 		echo '<h1>' . esc_html__( 'Mail Queue Dashboard', 'monte-mail-queue-throttle' ) . '</h1>';
 		echo '<div class="wmqt-actions">';
-		$this->render_admin_link( 'monte-mail-queue-settings', __( 'Settings', 'monte-mail-queue-throttle' ) );
+		if ( current_user_can( self::SETTINGS_CAPABILITY ) ) {
+			$this->render_admin_link( 'monte-mail-queue-settings', __( 'Settings', 'monte-mail-queue-throttle' ) );
+		}
 		$this->render_admin_link( 'monte-mail-queue-items', __( 'Queue', 'monte-mail-queue-throttle' ) );
 		$this->render_admin_link( 'monte-mail-queue-logs', __( 'Logs', 'monte-mail-queue-throttle' ) );
 		echo '</div>';
@@ -187,7 +190,7 @@ class Monte_Mail_Queue_Admin {
 	 * @return void
 	 */
 	public function render_settings() {
-		if ( ! current_user_can( self::CAPABILITY ) ) {
+		if ( ! current_user_can( self::SETTINGS_CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'monte-mail-queue-throttle' ) );
 		}
 
@@ -335,7 +338,7 @@ class Monte_Mail_Queue_Admin {
 	private function save_settings() {
 		check_admin_referer( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 
-		if ( ! current_user_can( self::CAPABILITY ) ) {
+		if ( ! current_user_can( self::SETTINGS_CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to save these settings.', 'monte-mail-queue-throttle' ) );
 		}
 

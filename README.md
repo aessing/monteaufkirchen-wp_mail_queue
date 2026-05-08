@@ -22,9 +22,9 @@ Built for WordPress sites that send bulk mail through providers with strict rate
 
 ## Current Version
 
-`0.4.0`
+`0.4.1`
 
-This release opens admin access to editors via the `edit_others_posts` capability, fixes the dashboard chart so each mail is counted once by its current status (instead of double-counting through its lifecycle), and carries forward the 0.3.x hardening: separate queue retention cleanup, retry backoff, guarded state transitions, admin/cron schema upgrade handling, improved queue and log tables, source plugin detection fixes, stricter database handling, and upload-ready packaging.
+This release restricts the Settings page to administrators (`manage_options`) — the menu entry, dashboard quick-link, page render, and save handler are all gated — while editors retain access to the Dashboard, Queue, and Logs via `edit_others_posts`. Carries forward 0.4.0's dashboard chart fix and 0.3.x hardening (queue retention cleanup, retry backoff, guarded state transitions, schema upgrade handling, improved tables, source plugin detection fixes, stricter database handling, upload-ready packaging).
 
 ## Architecture
 
