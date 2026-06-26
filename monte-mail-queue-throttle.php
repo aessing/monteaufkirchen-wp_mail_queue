@@ -32,6 +32,8 @@ require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-repository.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-throttle-window.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-source-detector.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-interceptor.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-delivery-result.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-azure-email-client.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-worker.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-admin.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-plugin.php';
