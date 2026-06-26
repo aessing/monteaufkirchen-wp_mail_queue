@@ -4,16 +4,17 @@
 
 A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the site's normal mail transport.
 
-Built for WordPress sites that send bulk mail through providers with strict rate limits, while keeping FluentSMTP or another SMTP plugin in the delivery path.
+Built for WordPress sites that send bulk mail through providers with strict rate limits, with optional Azure Communication Services Email delivery when direct provider transport is preferred.
 
 ## Highlights
 
 | Area | What it does |
 | --- | --- |
 | Queueing | Captures WordPress `wp_mail()` calls before immediate delivery. |
-| Throttling | Sends at a configurable rate, defaulting to 25 mails per minute. |
-| Cron cadence | Runs through a custom WP-Cron schedule every 120 seconds. |
-| FluentSMTP | Replays queued mail back through `wp_mail()`, so FluentSMTP still sends the final message. |
+| Throttling | Enforces an hourly send limit, defaulting to 1500 mails per hour. |
+| Cron cadence | Runs through a configurable WP-Cron schedule, defaulting to every 2 minutes. |
+| Azure delivery | Can send queued mail through Azure Communication Services Email REST API. |
+| FluentSMTP | Continues using FluentSMTP only when Azure transport is disabled. |
 | Source filtering | Can queue all mail or only mail detected from selected plugin slugs such as `send-users-email`. |
 | Admin UI | Includes Dashboard, Settings, Queue, and Logs views. |
 | Reporting | Shows status cards, a stacked 30-day mail activity chart, paginated queue rows, and log history. |
@@ -22,9 +23,9 @@ Built for WordPress sites that send bulk mail through providers with strict rate
 
 ## Current Version
 
-`0.4.1`
+`0.5.0`
 
-This release restricts the Settings page to administrators (`manage_options`) — the menu entry, dashboard quick-link, page render, and save handler are all gated — while editors retain access to the Dashboard, Queue, and Logs via `edit_others_posts`. Carries forward 0.4.0's dashboard chart fix and 0.3.x hardening (queue retention cleanup, retry backoff, guarded state transitions, schema upgrade handling, improved tables, source plugin detection fixes, stricter database handling, upload-ready packaging).
+This release adds hourly throttling, configurable worker cadence, Azure Communication Services Email delivery, test-mail support, send-window tracking, updated dashboard usage cards, and the final upload package refresh.
 
 ## Architecture
 
@@ -38,10 +39,11 @@ With Monte Mail Queue Throttle:
 
 ```text
 WordPress or plugin -> wp_mail() -> Monte Mail Queue Throttle -> queued database row
+WP-Cron worker -> Azure Communication Services Email REST API
 WP-Cron worker -> wp_mail() replay -> FluentSMTP -> SMTP provider
 ```
 
-During replay, the plugin enables an internal bypass so the worker's own `wp_mail()` call is not queued again.
+When Azure transport is enabled, the worker sends directly through the Azure Communication Services Email REST API. When Azure transport is disabled, the plugin enables an internal bypass so the worker's own `wp_mail()` replay is not queued again.
 
 ## Installation
 
@@ -49,6 +51,7 @@ During replay, the plugin enables an internal bypass so the worker's own `wp_mai
 2. Activate **Monte Mail Queue Throttle**.
 3. Open **Mail Queue > Dashboard** and confirm the worker schedule is visible.
 4. Open **Mail Queue > Settings** and review the send rate, retry count, source mode, and log retention.
+5. If Azure delivery is enabled, add the ACS connection string and verified sender settings before sending mail.
 
 Activation creates the queue and log tables, stores default settings when needed, and schedules the two-minute queue worker.
 
@@ -57,8 +60,10 @@ Activation creates the queue and log tables, stores default settings when needed
 Out of the box, the plugin:
 
 - Queues all eligible `wp_mail()` calls.
-- Processes the queue every two minutes with WP-Cron.
-- Sends up to 25 mails per minute, which means up to 50 messages per worker run.
+- Processes the queue every 2 minutes with WP-Cron.
+- Uses `rate_per_hour = 1500`.
+- Uses `worker_interval_minutes = 2`.
+- Calculates the per-run batch size from the hourly limit and worker interval.
 - Retries failed messages up to 3 total attempts.
 - Keeps logs for 30 days and completed sent queue rows for 180 days by default; failed queue rows are retained for at least 365 days.
 - Uses exponential retry backoff before a failed message is eligible for another send attempt.
@@ -73,8 +78,8 @@ The plugin start screen gives administrators a clear operational overview:
 
 - Active queue counts.
 - Failed and sent totals.
-- Configured mails-per-minute rate.
-- Calculated batch size per two-minute cron run.
+- Configured mails-per-hour rate.
+- Configured worker interval and calculated batch size per run.
 - Next scheduled worker run.
 - Stacked 30-day activity chart for queued volume plus `processing`, `failed`, and `sent` outcomes.
 - Active queue preview with at least 10 recent queue rows when available.
@@ -83,12 +88,19 @@ The plugin start screen gives administrators a clear operational overview:
 
 Configure:
 
-- Mails per minute.
+- Mails per hour.
+- Worker interval minutes.
 - Maximum attempts per message.
 - Queue mode: all sources or selected plugins.
 - Allowed plugin slugs.
 - Log retention in days.
 - Completed queue retention in days.
+- Azure connection string.
+- Verified sender domains.
+- Default sender username.
+- Default sender domain.
+- Reply-to email.
+- Test mail.
 
 Settings are stored in the `wmqt_settings` option.
 
@@ -113,9 +125,9 @@ The logs view is built for audit and diagnosis:
 
 ## FluentSMTP Notes
 
-Monte Mail Queue Throttle does not replace FluentSMTP. It controls when WordPress sends, then hands delivery back to the normal `wp_mail()` pipeline.
+Monte Mail Queue Throttle does not replace FluentSMTP when Azure transport is disabled. In that mode, it controls when WordPress sends, then hands delivery back to the normal `wp_mail()` pipeline.
 
-Configure FluentSMTP first, then use this plugin to slow down the rate at which queued messages reach FluentSMTP. Attachments are stored and replayed as their original local WordPress file paths, so queued payloads should be treated as trusted internal mail data.
+Configure FluentSMTP first when you want WordPress-based delivery. If Azure transport is enabled, FluentSMTP is bypassed and the worker sends through Azure Communication Services Email instead. Attachments are stored and replayed as their original local WordPress file paths, so queued payloads should be treated as trusted internal mail data.
 
 ## Source Plugin Filtering
 
