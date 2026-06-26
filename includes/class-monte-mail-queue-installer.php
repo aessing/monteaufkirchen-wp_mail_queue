@@ -67,16 +67,29 @@ class Monte_Mail_Queue_Installer {
 	}
 
 	/**
+	 * Clears and re-schedules the worker event.
+	 *
+	 * @return void
+	 */
+	public function reschedule_event() {
+		wp_clear_scheduled_hook( WMQT_CRON_HOOK );
+		$this->schedule_event();
+	}
+
+	/**
 	 * Registers the custom cron schedule.
 	 *
 	 * @param array<string, array<string, mixed>> $schedules Existing schedules.
 	 * @return array<string, array<string, mixed>>
 	 */
 	public function add_cron_schedule( $schedules ) {
+		$minutes = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
+		$seconds = $minutes * MINUTE_IN_SECONDS;
+
 		if ( ! isset( $schedules[ WMQT_CRON_SCHEDULE ] ) ) {
 			$schedules[ WMQT_CRON_SCHEDULE ] = array(
-				'interval' => 120,
-				'display'  => __( 'Every two minutes', 'monte-mail-queue-throttle' ),
+				'interval' => $seconds,
+				'display'  => sprintf( __( 'Every %d minute(s)', 'monte-mail-queue-throttle' ), $minutes ),
 			);
 		}
 
@@ -155,8 +168,10 @@ class Monte_Mail_Queue_Installer {
 	 * @return void
 	 */
 	private function schedule_event() {
+		$minutes = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
+
 		if ( ! wp_next_scheduled( WMQT_CRON_HOOK ) ) {
-			wp_schedule_event( time() + 120, WMQT_CRON_SCHEDULE, WMQT_CRON_HOOK );
+			wp_schedule_event( time() + ( $minutes * MINUTE_IN_SECONDS ), WMQT_CRON_SCHEDULE, WMQT_CRON_HOOK );
 		}
 	}
 }

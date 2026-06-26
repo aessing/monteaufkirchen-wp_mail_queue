@@ -33,6 +33,13 @@ class Monte_Mail_Queue_Admin {
 	private $repository;
 
 	/**
+	 * Installer dependency.
+	 *
+	 * @var Monte_Mail_Queue_Installer
+	 */
+	private $installer;
+
+	/**
 	 * Registered page hooks.
 	 *
 	 * @var array<string, bool>
@@ -44,10 +51,12 @@ class Monte_Mail_Queue_Admin {
 	 *
 	 * @param Monte_Mail_Queue_Settings   $settings Settings dependency.
 	 * @param Monte_Mail_Queue_Repository $repository Repository dependency.
+	 * @param Monte_Mail_Queue_Installer  $installer Installer dependency.
 	 */
-	public function __construct( Monte_Mail_Queue_Settings $settings, Monte_Mail_Queue_Repository $repository ) {
+	public function __construct( Monte_Mail_Queue_Settings $settings, Monte_Mail_Queue_Repository $repository, Monte_Mail_Queue_Installer $installer ) {
 		$this->settings   = $settings;
 		$this->repository = $repository;
+		$this->installer  = $installer;
 	}
 
 	/**
@@ -207,11 +216,19 @@ class Monte_Mail_Queue_Admin {
 		wp_nonce_field( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 		echo '<table class="form-table" role="presentation"><tbody>';
 		$this->render_number_field( 'rate_per_minute', __( 'Mails per minute', 'monte-mail-queue-throttle' ), $settings['rate_per_minute'] ?? 25 );
+		$this->render_number_field( 'rate_per_hour', __( 'Mails per hour', 'monte-mail-queue-throttle' ), $settings['rate_per_hour'] ?? 1500 );
+		$this->render_number_field( 'worker_interval_minutes', __( 'Worker interval minutes', 'monte-mail-queue-throttle' ), $settings['worker_interval_minutes'] ?? 2, __( 'Set to 1 when wp-cron.php is called every minute.', 'monte-mail-queue-throttle' ) );
 		$this->render_number_field( 'max_attempts', __( 'Max retries', 'monte-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
 		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
 		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30, __( 'How long delivery event rows in the logs table are kept.', 'monte-mail-queue-throttle' ) );
 		$this->render_number_field( 'queue_retention_days', __( 'Completed queue retention days', 'monte-mail-queue-throttle' ), $settings['queue_retention_days'] ?? 180, __( 'Sent mails are pruned after this many days. Failed mails are always kept at least 365 days for audit.', 'monte-mail-queue-throttle' ) );
+		$this->render_checkbox_field( 'azure_email_enabled', __( 'Azure email transport', 'monte-mail-queue-throttle' ), $settings['azure_email_enabled'] ?? 0 );
+		$this->render_textarea_field( 'azure_connection_string', __( 'Azure connection string', 'monte-mail-queue-throttle' ), $settings['azure_connection_string'] ?? '' );
+		$this->render_textarea_field( 'azure_sender_domains', __( 'Azure sender domains', 'monte-mail-queue-throttle' ), $settings['azure_sender_domains'] ?? '', __( 'One domain per line or comma-separated.', 'monte-mail-queue-throttle' ) );
+		$this->render_text_field( 'azure_sender_username', __( 'Azure sender username', 'monte-mail-queue-throttle' ), $settings['azure_sender_username'] ?? 'DoNotReply' );
+		$this->render_text_field( 'azure_default_domain', __( 'Azure default domain', 'monte-mail-queue-throttle' ), $settings['azure_default_domain'] ?? '' );
+		$this->render_email_field( 'azure_reply_to', __( 'Azure reply-to address', 'monte-mail-queue-throttle' ), $settings['azure_reply_to'] ?? '' );
 		echo '</tbody></table>';
 		submit_button( __( 'Save Settings', 'monte-mail-queue-throttle' ) );
 		echo '</form>';
@@ -342,16 +359,32 @@ class Monte_Mail_Queue_Admin {
 			wp_die( esc_html__( 'You do not have permission to save these settings.', 'monte-mail-queue-throttle' ) );
 		}
 
+		$previous = $this->settings->get_all();
+
 		$this->settings->update(
 			array(
 				'rate_per_minute'      => isset( $_POST['rate_per_minute'] ) ? wp_unslash( $_POST['rate_per_minute'] ) : 25,
+				'rate_per_hour'        => isset( $_POST['rate_per_hour'] ) ? wp_unslash( $_POST['rate_per_hour'] ) : 1500,
+				'worker_interval_minutes' => isset( $_POST['worker_interval_minutes'] ) ? wp_unslash( $_POST['worker_interval_minutes'] ) : 2,
 				'max_attempts'         => isset( $_POST['max_attempts'] ) ? wp_unslash( $_POST['max_attempts'] ) : 3,
 				'queue_mode'           => isset( $_POST['queue_mode'] ) ? wp_unslash( $_POST['queue_mode'] ) : 'all',
 				'allowed_plugins'      => isset( $_POST['allowed_plugins'] ) ? wp_unslash( $_POST['allowed_plugins'] ) : '',
 				'log_retention_days'   => isset( $_POST['log_retention_days'] ) ? wp_unslash( $_POST['log_retention_days'] ) : 30,
 				'queue_retention_days' => isset( $_POST['queue_retention_days'] ) ? wp_unslash( $_POST['queue_retention_days'] ) : 180,
+				'azure_email_enabled'  => isset( $_POST['azure_email_enabled'] ) ? wp_unslash( $_POST['azure_email_enabled'] ) : 0,
+				'azure_connection_string' => isset( $_POST['azure_connection_string'] ) ? wp_unslash( $_POST['azure_connection_string'] ) : '',
+				'azure_sender_domains' => isset( $_POST['azure_sender_domains'] ) ? wp_unslash( $_POST['azure_sender_domains'] ) : '',
+				'azure_sender_username' => isset( $_POST['azure_sender_username'] ) ? wp_unslash( $_POST['azure_sender_username'] ) : 'DoNotReply',
+				'azure_default_domain' => isset( $_POST['azure_default_domain'] ) ? wp_unslash( $_POST['azure_default_domain'] ) : '',
+				'azure_reply_to'       => isset( $_POST['azure_reply_to'] ) ? wp_unslash( $_POST['azure_reply_to'] ) : '',
 			)
 		);
+
+		$current = $this->settings->get_all();
+
+		if ( (int) $previous['worker_interval_minutes'] !== (int) $current['worker_interval_minutes'] ) {
+			$this->installer->reschedule_event();
+		}
 
 		add_settings_error(
 			'wmqt_messages',
@@ -520,12 +553,79 @@ class Monte_Mail_Queue_Admin {
 	 * @param mixed  $value Field value.
 	 * @return void
 	 */
-	private function render_text_field( $name, $label, $value ) {
+	private function render_text_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
 		printf(
-			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="text" value="%3$s" class="regular-text"></td></tr>',
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="text" value="%3$s" class="regular-text">%4$s</td></tr>',
 			esc_attr( $name ),
 			esc_html( $label ),
-			esc_attr( (string) $value )
+			esc_attr( (string) $value ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders a checkbox settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_checkbox_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row">%2$s</th><td><label><input name="%1$s" id="%1$s" type="checkbox" value="1" %3$s> %4$s</label>%5$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			checked( 1, (int) $value, false ),
+			esc_html__( 'Enabled', 'monte-mail-queue-throttle' ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders a textarea settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_textarea_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><textarea name="%1$s" id="%1$s" rows="4" class="large-text code">%3$s</textarea>%4$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			esc_textarea( (string) $value ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders an email settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_email_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="email" value="%3$s" class="regular-text">%4$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			esc_attr( (string) $value ),
+			$description_html
 		);
 	}
 
