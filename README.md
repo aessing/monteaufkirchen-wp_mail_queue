@@ -2,7 +2,7 @@
 
 # Monte Mail Queue Throttle
 
-A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the site's normal mail transport.
+A WordPress plugin that intercepts `wp_mail()` calls, queues eligible messages, and sends them later at a controlled pace through the configured transport.
 
 Built for WordPress sites that send bulk mail through providers with strict rate limits, with optional Azure Communication Services Email delivery when direct provider transport is preferred.
 
@@ -50,10 +50,10 @@ When Azure transport is enabled, the worker sends directly through the Azure Com
 1. Upload `monte-mail-queue-throttle.zip` in WordPress under **Plugins > Add New > Upload Plugin**.
 2. Activate **Monte Mail Queue Throttle**.
 3. Open **Mail Queue > Dashboard** and confirm the worker schedule is visible.
-4. Open **Mail Queue > Settings** and review the send rate, retry count, source mode, and log retention.
+4. Open **Mail Queue > Settings** and review the send rate, worker interval, retry count, source mode, Azure transport settings, and retention settings.
 5. If Azure delivery is enabled, add the ACS connection string and verified sender settings before sending mail.
 
-Activation creates the queue and log tables, stores default settings when needed, and schedules the two-minute queue worker.
+Activation creates the queue and log tables, stores default settings when needed, and schedules the queue worker using the configured interval.
 
 ## Default Behavior
 
@@ -152,7 +152,7 @@ add_filter( 'wmqt_ignored_source_plugin_slugs', function ( array $slugs ): array
 
 ## GoDaddy And WP-Cron
 
-This plugin is designed to work with GoDaddy Managed WordPress style hosting where a system cron calls WordPress roughly every two minutes.
+This plugin is designed to work with managed WordPress hosting where a host or external cron calls WordPress regularly. Set **Worker interval minutes** to match the actual cron cadence, for example `1` when WP-Cron runs every minute.
 
 WP-Cron normally depends on site traffic. For reliable delivery on quiet sites, make sure the host or a real server cron calls `wp-cron.php` regularly. If `DISABLE_WP_CRON` is enabled, an external cron runner is required.
 
