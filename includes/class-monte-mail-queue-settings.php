@@ -20,11 +20,19 @@ class Monte_Mail_Queue_Settings {
 	 */
 	private $defaults = array(
 		'rate_per_minute'      => 25,
+		'rate_per_hour'        => 1500,
+		'worker_interval_minutes' => 2,
 		'max_attempts'         => 3,
 		'queue_mode'           => 'all',
 		'allowed_plugins'      => 'email-users,send-users-email',
 		'log_retention_days'   => 30,
 		'queue_retention_days' => 180,
+		'azure_email_enabled'  => 0,
+		'azure_connection_string' => '',
+		'azure_sender_domains' => '',
+		'azure_sender_username' => 'DoNotReply',
+		'azure_default_domain' => '',
+		'azure_reply_to'       => '',
 	);
 
 	/**
@@ -108,11 +116,19 @@ class Monte_Mail_Queue_Settings {
 
 		return array(
 			'rate_per_minute'      => max( 1, absint( $settings['rate_per_minute'] ?? $this->defaults['rate_per_minute'] ) ),
+			'rate_per_hour'        => max( 1, absint( $settings['rate_per_hour'] ?? $this->defaults['rate_per_hour'] ) ),
+			'worker_interval_minutes' => min( 60, max( 1, absint( $settings['worker_interval_minutes'] ?? $this->defaults['worker_interval_minutes'] ) ) ),
 			'max_attempts'         => max( 1, absint( $settings['max_attempts'] ?? $this->defaults['max_attempts'] ) ),
 			'queue_mode'           => $queue_mode,
 			'allowed_plugins'      => $this->sanitize_allowed_plugins( $settings['allowed_plugins'] ?? $this->defaults['allowed_plugins'] ),
 			'log_retention_days'   => max( 1, absint( $settings['log_retention_days'] ?? $this->defaults['log_retention_days'] ) ),
 			'queue_retention_days' => max( 1, absint( $settings['queue_retention_days'] ?? $this->defaults['queue_retention_days'] ) ),
+			'azure_email_enabled'  => empty( $settings['azure_email_enabled'] ) ? 0 : 1,
+			'azure_connection_string' => $this->sanitize_connection_string( $settings['azure_connection_string'] ?? '' ),
+			'azure_sender_domains' => $this->sanitize_sender_domains( $settings['azure_sender_domains'] ?? '' ),
+			'azure_sender_username' => $this->sanitize_sender_username( $settings['azure_sender_username'] ?? $this->defaults['azure_sender_username'] ),
+			'azure_default_domain' => $this->sanitize_domain( $settings['azure_default_domain'] ?? '' ),
+			'azure_reply_to'       => sanitize_email( $settings['azure_reply_to'] ?? '' ),
 		);
 	}
 
@@ -137,5 +153,57 @@ class Monte_Mail_Queue_Settings {
 		);
 
 		return implode( ',', array_unique( $slugs ) );
+	}
+
+	/**
+	 * Sanitizes the Azure connection string.
+	 *
+	 * @param mixed $value Raw connection string.
+	 * @return string
+	 */
+	private function sanitize_connection_string( $value ) {
+		return trim( preg_replace( '/[\r\n\t]+/', '', (string) $value ) );
+	}
+
+	/**
+	 * Sanitizes a comma or newline-separated list of sender domains.
+	 *
+	 * @param mixed $value Raw domain list.
+	 * @return string
+	 */
+	private function sanitize_sender_domains( $value ) {
+		if ( is_array( $value ) ) {
+			$value = implode( ',', $value );
+		}
+
+		$domains = preg_split( '/[\r\n,]+/', (string) $value );
+		$domains = array_filter( array_map( array( $this, 'sanitize_domain' ), $domains ) );
+
+		return implode( ',', array_unique( $domains ) );
+	}
+
+	/**
+	 * Sanitizes the Azure sender username.
+	 *
+	 * @param mixed $value Raw sender username.
+	 * @return string
+	 */
+	private function sanitize_sender_username( $value ) {
+		$value = preg_replace( '/[^A-Za-z0-9._%+\-]/', '', (string) $value );
+
+		return '' !== $value ? $value : $this->defaults['azure_sender_username'];
+	}
+
+	/**
+	 * Sanitizes a domain-like value.
+	 *
+	 * @param mixed $value Raw domain.
+	 * @return string
+	 */
+	private function sanitize_domain( $value ) {
+		$value = strtolower( trim( (string) $value ) );
+		$value = preg_replace( '/[^a-z0-9.\-]/', '', $value );
+
+		return trim( $value, '.-' );
 	}
 }

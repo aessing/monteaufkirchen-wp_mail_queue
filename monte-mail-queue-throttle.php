@@ -2,10 +2,10 @@
 /**
  * Plugin Name: Monte Mail Queue Throttle
  * Plugin URI: https://www.linkedin.com/in/aessing/
- * Description: Queues WordPress mail for throttled replay through the configured wp_mail transport.
- * Version: 0.4.1
+ * Description: Queues WordPress mail for throttled replay through the configured transport.
+ * Version: 0.5.0
  * Requires at least: 5.8
- * Requires PHP: 7.0
+ * Requires PHP: 7.1
  * Author: Andre Essing
  * Author URI: https://www.linkedin.com/in/aessing/
  * License: GPL-2.0-or-later
@@ -18,7 +18,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WMQT_VERSION', '0.4.1' );
+define( 'WMQT_VERSION', '0.5.0' );
 define( 'WMQT_PLUGIN_FILE', __FILE__ );
 define( 'WMQT_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WMQT_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
@@ -29,8 +29,11 @@ define( 'WMQT_CRON_HOOK', 'wmqt_process_queue' );
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-settings.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-installer.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-repository.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-throttle-window.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-source-detector.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-interceptor.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-delivery-result.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-azure-email-client.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-worker.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-admin.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-plugin.php';

@@ -33,6 +33,27 @@ class Monte_Mail_Queue_Admin {
 	private $repository;
 
 	/**
+	 * Installer dependency.
+	 *
+	 * @var Monte_Mail_Queue_Installer
+	 */
+	private $installer;
+
+	/**
+	 * Throttle window dependency.
+	 *
+	 * @var mixed
+	 */
+	private $throttle_window;
+
+	/**
+	 * Azure client dependency.
+	 *
+	 * @var mixed
+	 */
+	private $azure_client;
+
+	/**
 	 * Registered page hooks.
 	 *
 	 * @var array<string, bool>
@@ -44,10 +65,16 @@ class Monte_Mail_Queue_Admin {
 	 *
 	 * @param Monte_Mail_Queue_Settings   $settings Settings dependency.
 	 * @param Monte_Mail_Queue_Repository $repository Repository dependency.
+	 * @param Monte_Mail_Queue_Installer  $installer Installer dependency.
+	 * @param mixed                       $throttle_window Throttle window dependency.
+	 * @param mixed                       $azure_client Azure client dependency.
 	 */
-	public function __construct( Monte_Mail_Queue_Settings $settings, Monte_Mail_Queue_Repository $repository ) {
-		$this->settings   = $settings;
-		$this->repository = $repository;
+	public function __construct( Monte_Mail_Queue_Settings $settings, Monte_Mail_Queue_Repository $repository, Monte_Mail_Queue_Installer $installer, $throttle_window = null, $azure_client = null ) {
+		$this->settings        = $settings;
+		$this->repository      = $repository;
+		$this->installer       = $installer;
+		$this->throttle_window = $throttle_window;
+		$this->azure_client    = $azure_client;
 	}
 
 	/**
@@ -145,17 +172,26 @@ class Monte_Mail_Queue_Admin {
 		$counts        = $this->repository->counts();
 		$settings      = $this->settings->get_all();
 		$rate          = max( 1, absint( $settings['rate_per_minute'] ?? 25 ) );
-		$per_run_limit = $rate * 2;
+		$hour_rate     = max( 1, absint( $settings['rate_per_hour'] ?? 1500 ) );
+		$interval      = max( 1, min( 60, absint( $settings['worker_interval_minutes'] ?? 2 ) ) );
+		$per_run_limit = $rate * $interval;
 		$next_cron     = wp_next_scheduled( WMQT_CRON_HOOK );
 		$chart_data    = $this->repository->daily_status_counts( 30 );
 		$active_total  = $this->repository->queue_items_count( 'active' );
 		$active_items  = $this->repository->queue_items( 'active', 10 );
+		$transport     = 1 === (int) ( $settings['azure_email_enabled'] ?? 0 ) ? 'azure_communication_email' : 'wp_mail';
+		$window_status = $this->throttle_window && method_exists( $this->throttle_window, 'status' ) ? $this->throttle_window->status( $transport ) : array();
 		$cards         = array(
 			array( __( 'Queued', 'monte-mail-queue-throttle' ), (int) ( $counts['queued'] ?? 0 ) ),
 			array( __( 'Processing', 'monte-mail-queue-throttle' ), (int) ( $counts['processing'] ?? 0 ) ),
 			array( __( 'Sent', 'monte-mail-queue-throttle' ), (int) ( $counts['sent'] ?? 0 ) ),
 			array( __( 'Failed', 'monte-mail-queue-throttle' ), (int) ( $counts['failed'] ?? 0 ) ),
 			array( __( 'Configured rate', 'monte-mail-queue-throttle' ), sprintf( _n( '%d mail/min', '%d mails/min', $rate, 'monte-mail-queue-throttle' ), $rate ) ),
+			array( __( 'Configured hour rate', 'monte-mail-queue-throttle' ), sprintf( _n( '%d mail/hour', '%d mails/hour', $hour_rate, 'monte-mail-queue-throttle' ), $hour_rate ) ),
+			array( __( 'Worker interval', 'monte-mail-queue-throttle' ), sprintf( _n( '%d minute', '%d minutes', $interval, 'monte-mail-queue-throttle' ), $interval ) ),
+			array( __( 'Minute window', 'monte-mail-queue-throttle' ), sprintf( '%d / %d', (int) ( $window_status['minute_used'] ?? 0 ), max( 1, (int) ( $window_status['minute_limit'] ?? $rate ) ) ) ),
+			array( __( 'Hour window', 'monte-mail-queue-throttle' ), sprintf( '%d / %d', (int) ( $window_status['hour_used'] ?? 0 ), max( 1, (int) ( $window_status['hour_limit'] ?? $hour_rate ) ) ) ),
+			array( __( 'Active transport', 'monte-mail-queue-throttle' ), $transport ),
 			array( __( 'Per-run limit', 'monte-mail-queue-throttle' ), $per_run_limit ),
 			array( __( 'Next cron', 'monte-mail-queue-throttle' ), $this->format_timestamp( $next_cron ) ),
 		);
@@ -198,6 +234,10 @@ class Monte_Mail_Queue_Admin {
 			$this->save_settings();
 		}
 
+		if ( isset( $_POST['wmqt_test_mail_nonce'] ) ) {
+			$this->send_test_mail();
+		}
+
 		$settings = $this->settings->get_all();
 
 		echo '<div class="wrap wmqt-admin">';
@@ -207,14 +247,42 @@ class Monte_Mail_Queue_Admin {
 		wp_nonce_field( 'wmqt_save_settings', 'wmqt_settings_nonce' );
 		echo '<table class="form-table" role="presentation"><tbody>';
 		$this->render_number_field( 'rate_per_minute', __( 'Mails per minute', 'monte-mail-queue-throttle' ), $settings['rate_per_minute'] ?? 25 );
+		$this->render_number_field( 'rate_per_hour', __( 'Mails per hour', 'monte-mail-queue-throttle' ), $settings['rate_per_hour'] ?? 1500 );
+		$this->render_number_field( 'worker_interval_minutes', __( 'Worker interval minutes', 'monte-mail-queue-throttle' ), $settings['worker_interval_minutes'] ?? 2, __( 'Set to 1 when wp-cron.php is called every minute.', 'monte-mail-queue-throttle' ), 60 );
 		$this->render_number_field( 'max_attempts', __( 'Max retries', 'monte-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
 		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
 		$this->render_number_field( 'log_retention_days', __( 'Log retention days', 'monte-mail-queue-throttle' ), $settings['log_retention_days'] ?? 30, __( 'How long delivery event rows in the logs table are kept.', 'monte-mail-queue-throttle' ) );
 		$this->render_number_field( 'queue_retention_days', __( 'Completed queue retention days', 'monte-mail-queue-throttle' ), $settings['queue_retention_days'] ?? 180, __( 'Sent mails are pruned after this many days. Failed mails are always kept at least 365 days for audit.', 'monte-mail-queue-throttle' ) );
 		echo '</tbody></table>';
+		echo '<div class="wmqt-settings-section">';
+		echo '<h2>' . esc_html__( 'Azure Communication Email', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<table class="form-table" role="presentation"><tbody>';
+		$this->render_checkbox_field( 'azure_email_enabled', __( 'Enable Azure Email transport', 'monte-mail-queue-throttle' ), $settings['azure_email_enabled'] ?? 0, __( 'When enabled, the queue worker sends through Azure Communication Services Email instead of wp_mail().', 'monte-mail-queue-throttle' ) );
+		$this->render_textarea_field( 'azure_connection_string', __( 'ACS connection string', 'monte-mail-queue-throttle' ), $settings['azure_connection_string'] ?? '', __( 'Paste the Azure Communication Services connection string.', 'monte-mail-queue-throttle' ) );
+		$this->render_textarea_field( 'azure_sender_domains', __( 'Verified sender domains', 'monte-mail-queue-throttle' ), $settings['azure_sender_domains'] ?? '', __( 'Enter one verified domain per line or comma-separated.', 'monte-mail-queue-throttle' ) );
+		$this->render_text_field( 'azure_sender_username', __( 'Default sender username', 'monte-mail-queue-throttle' ), $settings['azure_sender_username'] ?? 'DoNotReply' );
+		$this->render_text_field( 'azure_default_domain', __( 'Default sender domain', 'monte-mail-queue-throttle' ), $settings['azure_default_domain'] ?? '' );
+		$this->render_email_field( 'azure_reply_to', __( 'Reply-to email', 'monte-mail-queue-throttle' ), $settings['azure_reply_to'] ?? '' );
+		echo '</tbody></table>';
+		echo '</div>';
 		submit_button( __( 'Save Settings', 'monte-mail-queue-throttle' ) );
 		echo '</form>';
+		echo '<div class="wmqt-test-mail">';
+		echo '<h2>' . esc_html__( 'Send test email', 'monte-mail-queue-throttle' ) . '</h2>';
+		echo '<form method="post" enctype="multipart/form-data" action="">';
+		wp_nonce_field( 'wmqt_send_test_mail', 'wmqt_test_mail_nonce' );
+		echo '<table class="form-table" role="presentation"><tbody>';
+		$this->render_sender_domain_select( $settings );
+		$this->render_text_field( 'test_sender_username', __( 'Sender email username', 'monte-mail-queue-throttle' ), $settings['azure_sender_username'] ?? 'DoNotReply' );
+		$this->render_email_field( 'test_recipient', __( 'Recipient email address', 'monte-mail-queue-throttle' ), '' );
+		$this->render_text_field( 'test_subject', __( 'Subject', 'monte-mail-queue-throttle' ), __( 'Test Email', 'monte-mail-queue-throttle' ) );
+		$this->render_textarea_field( 'test_body', __( 'Body', 'monte-mail-queue-throttle' ), __( 'Hello world via email.', 'monte-mail-queue-throttle' ) );
+		echo '<tr><th scope="row"><label for="test_attachment">' . esc_html__( 'Attachment', 'monte-mail-queue-throttle' ) . '</label></th><td><input type="file" name="test_attachment" id="test_attachment"></td></tr>';
+		echo '</tbody></table>';
+		submit_button( __( 'Send', 'monte-mail-queue-throttle' ), 'primary', 'wmqt_send_test_mail' );
+		echo '</form>';
+		echo '</div>';
 		echo '</div>';
 	}
 
@@ -342,16 +410,32 @@ class Monte_Mail_Queue_Admin {
 			wp_die( esc_html__( 'You do not have permission to save these settings.', 'monte-mail-queue-throttle' ) );
 		}
 
+		$previous = $this->settings->get_all();
+
 		$this->settings->update(
 			array(
 				'rate_per_minute'      => isset( $_POST['rate_per_minute'] ) ? wp_unslash( $_POST['rate_per_minute'] ) : 25,
+				'rate_per_hour'        => isset( $_POST['rate_per_hour'] ) ? wp_unslash( $_POST['rate_per_hour'] ) : 1500,
+				'worker_interval_minutes' => isset( $_POST['worker_interval_minutes'] ) ? wp_unslash( $_POST['worker_interval_minutes'] ) : 2,
 				'max_attempts'         => isset( $_POST['max_attempts'] ) ? wp_unslash( $_POST['max_attempts'] ) : 3,
 				'queue_mode'           => isset( $_POST['queue_mode'] ) ? wp_unslash( $_POST['queue_mode'] ) : 'all',
 				'allowed_plugins'      => isset( $_POST['allowed_plugins'] ) ? wp_unslash( $_POST['allowed_plugins'] ) : '',
 				'log_retention_days'   => isset( $_POST['log_retention_days'] ) ? wp_unslash( $_POST['log_retention_days'] ) : 30,
 				'queue_retention_days' => isset( $_POST['queue_retention_days'] ) ? wp_unslash( $_POST['queue_retention_days'] ) : 180,
+				'azure_email_enabled'  => isset( $_POST['azure_email_enabled'] ) ? wp_unslash( $_POST['azure_email_enabled'] ) : 0,
+				'azure_connection_string' => isset( $_POST['azure_connection_string'] ) ? wp_unslash( $_POST['azure_connection_string'] ) : '',
+				'azure_sender_domains' => isset( $_POST['azure_sender_domains'] ) ? wp_unslash( $_POST['azure_sender_domains'] ) : '',
+				'azure_sender_username' => isset( $_POST['azure_sender_username'] ) ? wp_unslash( $_POST['azure_sender_username'] ) : 'DoNotReply',
+				'azure_default_domain' => isset( $_POST['azure_default_domain'] ) ? wp_unslash( $_POST['azure_default_domain'] ) : '',
+				'azure_reply_to'       => isset( $_POST['azure_reply_to'] ) ? wp_unslash( $_POST['azure_reply_to'] ) : '',
 			)
 		);
+
+		$current = $this->settings->get_all();
+
+		if ( (int) $previous['worker_interval_minutes'] !== (int) $current['worker_interval_minutes'] ) {
+			$this->installer->reschedule_event();
+		}
 
 		add_settings_error(
 			'wmqt_messages',
@@ -359,6 +443,252 @@ class Monte_Mail_Queue_Admin {
 			__( 'Settings saved.', 'monte-mail-queue-throttle' ),
 			'updated'
 		);
+	}
+
+	/**
+	 * Returns normalized sender domains from settings input.
+	 *
+	 * @param string $raw_domains Raw sender domains.
+	 * @return array<int, string>
+	 */
+	private function sender_domains( $raw_domains ) {
+		$domains = preg_split( '/[\r\n,]+/', (string) $raw_domains );
+		$cleaned = array();
+
+		if ( ! is_array( $domains ) ) {
+			return $cleaned;
+		}
+
+		foreach ( $domains as $domain ) {
+			$domain = sanitize_text_field( $domain );
+
+			if ( '' === $domain ) {
+				continue;
+			}
+
+			$cleaned[] = $domain;
+		}
+
+		return array_values( array_unique( $cleaned ) );
+	}
+
+	/**
+	 * Builds headers for manual test sends.
+	 *
+	 * @param string $sender_username Sender username.
+	 * @param string $sender_domain Sender domain.
+	 * @param string $reply_to Reply-to address.
+	 * @return array<int, string>
+	 */
+	private function test_mail_headers( $sender_username, $sender_domain, $reply_to ) {
+		$headers = array();
+
+		if ( '' !== $sender_username && '' !== $sender_domain ) {
+			$headers[] = 'From: ' . $sender_username . '@' . $sender_domain;
+		}
+
+		if ( '' !== $reply_to ) {
+			$headers[] = 'Reply-To: ' . $reply_to;
+		}
+
+		return $headers;
+	}
+
+	/**
+	 * Resolves the sender domain for a manual test send.
+	 *
+	 * @param array<string, mixed> $settings Saved plugin settings.
+	 * @param string               $posted_domain Sender domain from the request.
+	 * @return array{valid: bool, domain: string}
+	 */
+	private function resolve_test_sender_domain( array $settings, $posted_domain ) {
+		$domains        = $this->sender_domains( (string) ( $settings['azure_sender_domains'] ?? '' ) );
+		$posted_domain  = sanitize_text_field( $posted_domain );
+		$default_domain = sanitize_text_field( (string) ( $settings['azure_default_domain'] ?? '' ) );
+
+		if ( '' !== $posted_domain ) {
+			return array(
+				'valid'  => in_array( $posted_domain, $domains, true ),
+				'domain' => $posted_domain,
+			);
+		}
+
+		if ( '' !== $default_domain && in_array( $default_domain, $domains, true ) ) {
+			return array(
+				'valid'  => true,
+				'domain' => $default_domain,
+			);
+		}
+
+		return array(
+			'valid'  => true,
+			'domain' => ! empty( $domains ) ? (string) $domains[0] : '',
+		);
+	}
+
+	/**
+	 * Returns the uploaded temporary file path for the test attachment.
+	 *
+	 * @return string
+	 */
+	private function uploaded_test_attachment_path() {
+		if ( empty( $_FILES['test_attachment'] ) || ! is_array( $_FILES['test_attachment'] ) ) {
+			return '';
+		}
+
+		if ( UPLOAD_ERR_OK !== (int) ( $_FILES['test_attachment']['error'] ?? UPLOAD_ERR_NO_FILE ) ) {
+			return '';
+		}
+
+		if ( empty( $_FILES['test_attachment']['tmp_name'] ) ) {
+			return '';
+		}
+
+		$path = (string) $_FILES['test_attachment']['tmp_name'];
+
+		return $this->is_uploaded_test_file( $path ) ? $path : '';
+	}
+
+	/**
+	 * Checks whether the provided path is a valid uploaded test attachment.
+	 *
+	 * @param string $path Candidate temp path.
+	 * @return bool
+	 */
+	protected function is_uploaded_test_file( $path ) {
+		return '' !== $path && is_uploaded_file( $path );
+	}
+
+	/**
+	 * Deletes a validated uploaded test attachment temp file.
+	 *
+	 * @param string $path Temp path to remove.
+	 * @return void
+	 */
+	protected function delete_uploaded_test_file( $path ) {
+		if ( '' !== $path && file_exists( $path ) ) {
+			@unlink( $path );
+		}
+	}
+
+	/**
+	 * Records an accepted manual test send.
+	 *
+	 * @param string $transport Transport slug.
+	 * @param string $provider_message_id Provider message identifier.
+	 * @return void
+	 */
+	private function record_test_mail_acceptance( $transport, $provider_message_id = '' ) {
+		if ( $this->throttle_window && method_exists( $this->throttle_window, 'record_accepted' ) ) {
+			$this->throttle_window->record_accepted( 0, $transport, $provider_message_id );
+		}
+
+		$this->repository->log( 0, 'test_sent', __( 'Test email accepted for delivery.', 'monte-mail-queue-throttle' ), '' );
+		add_settings_error( 'wmqt_messages', 'wmqt_test_mail_sent', __( 'Test email accepted for delivery.', 'monte-mail-queue-throttle' ), 'updated' );
+	}
+
+	/**
+	 * Formats a throttling message from the window status payload.
+	 *
+	 * @param array<string, mixed> $status Throttle window status.
+	 * @return string
+	 */
+	private function throttle_message( array $status ) {
+		if ( 'hour' === ( $status['reason'] ?? '' ) ) {
+			return sprintf(
+				'Hour window full: %d/%d used.',
+				(int) ( $status['hour_used'] ?? 0 ),
+				(int) ( $status['hour_limit'] ?? 0 )
+			);
+		}
+
+		return sprintf(
+			'Minute window full: %d/%d used.',
+			(int) ( $status['minute_used'] ?? 0 ),
+			(int) ( $status['minute_limit'] ?? 0 )
+		);
+	}
+
+	/**
+	 * Sends a manual test message from the admin screen.
+	 *
+	 * @return void
+	 */
+	private function send_test_mail() {
+		check_admin_referer( 'wmqt_send_test_mail', 'wmqt_test_mail_nonce' );
+
+		if ( ! current_user_can( self::SETTINGS_CAPABILITY ) ) {
+			wp_die( esc_html__( 'You do not have permission to send test emails.', 'monte-mail-queue-throttle' ) );
+		}
+
+		$settings        = $this->settings->get_all();
+		$transport       = 1 === (int) ( $settings['azure_email_enabled'] ?? 0 ) ? 'azure_communication_email' : 'wp_mail';
+		$sender_domain   = isset( $_POST['test_sender_domain'] ) ? (string) wp_unslash( $_POST['test_sender_domain'] ) : '';
+		$sender_username = isset( $_POST['test_sender_username'] ) ? sanitize_text_field( wp_unslash( $_POST['test_sender_username'] ) ) : (string) ( $settings['azure_sender_username'] ?? 'DoNotReply' );
+		$recipient       = isset( $_POST['test_recipient'] ) ? sanitize_email( wp_unslash( $_POST['test_recipient'] ) ) : '';
+		$subject         = isset( $_POST['test_subject'] ) ? sanitize_text_field( wp_unslash( $_POST['test_subject'] ) ) : __( 'Test Email', 'monte-mail-queue-throttle' );
+		$body            = isset( $_POST['test_body'] ) ? (string) wp_unslash( $_POST['test_body'] ) : __( 'Hello world via email.', 'monte-mail-queue-throttle' );
+		$domain_result   = $this->resolve_test_sender_domain( $settings, $sender_domain );
+		$sender_domain   = $domain_result['domain'];
+		$attachment_path = $this->uploaded_test_attachment_path();
+		$mail            = array(
+			'to'          => array( $recipient ),
+			'subject'     => $subject,
+			'message'     => $body,
+			'headers'     => $this->test_mail_headers( $sender_username, $sender_domain, (string) ( $settings['azure_reply_to'] ?? '' ) ),
+			'attachments' => '' !== $attachment_path ? array( $attachment_path ) : array(),
+		);
+		$status          = $this->throttle_window && method_exists( $this->throttle_window, 'status' ) ? $this->throttle_window->status( $transport ) : array( 'allowed' => true );
+
+		try {
+			if ( ! $domain_result['valid'] ) {
+				$message = __( 'Selected sender domain is not in the configured allowlist.', 'monte-mail-queue-throttle' );
+				$this->repository->log( 0, 'test_failed', $message, '' );
+				add_settings_error( 'wmqt_messages', 'wmqt_test_mail_failed', $message, 'error' );
+				return;
+			}
+
+			if ( empty( $status['allowed'] ) ) {
+				$this->repository->log( 0, 'minute' === ( $status['reason'] ?? '' ) ? 'throttled_minute' : 'throttled_hour', $this->throttle_message( $status ), '' );
+				add_settings_error( 'wmqt_messages', 'wmqt_test_mail_throttled', __( 'Test email was throttled by the active send window.', 'monte-mail-queue-throttle' ), 'error' );
+				return;
+			}
+
+			if ( 'azure_communication_email' === $transport ) {
+				$result = $this->azure_client && method_exists( $this->azure_client, 'send' ) ? $this->azure_client->send(
+					$mail,
+					array(
+						'sender_username' => $sender_username,
+						'sender_domain'   => $sender_domain,
+					)
+				) : Monte_Mail_Queue_Delivery_Result::retry_result( 'Azure email client is not configured.' );
+
+				if ( $result->accepted() ) {
+					$this->record_test_mail_acceptance( $transport, $result->provider_message_id() );
+					return;
+				}
+
+				if ( $result->retryable() ) {
+					$this->repository->log( 0, 'test_retry', $result->error(), '' );
+					add_settings_error( 'wmqt_messages', 'wmqt_test_mail_retry', $result->error(), 'error' );
+					return;
+				}
+
+				$this->repository->log( 0, 'test_failed', $result->error(), '' );
+				add_settings_error( 'wmqt_messages', 'wmqt_test_mail_failed', $result->error(), 'error' );
+				return;
+			}
+
+			if ( wp_mail( $recipient, $subject, $body, $mail['headers'], $mail['attachments'] ) ) {
+				$this->record_test_mail_acceptance( $transport );
+				return;
+			}
+
+			$this->repository->log( 0, 'test_failed', __( 'wp_mail() returned false for the test email.', 'monte-mail-queue-throttle' ), '' );
+			add_settings_error( 'wmqt_messages', 'wmqt_test_mail_failed', __( 'wp_mail() returned false for the test email.', 'monte-mail-queue-throttle' ), 'error' );
+		} finally {
+			$this->delete_uploaded_test_file( $attachment_path );
+		}
 	}
 
 	/**
@@ -498,17 +828,20 @@ class Monte_Mail_Queue_Admin {
 	 * @param string $label Field label.
 	 * @param mixed  $value Field value.
 	 * @param string $description Optional help text shown below the field.
+	 * @param int    $max Optional maximum value.
 	 * @return void
 	 */
-	private function render_number_field( $name, $label, $value, $description = '' ) {
+	private function render_number_field( $name, $label, $value, $description = '', $max = 0 ) {
 		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+		$max_attr         = 0 < (int) $max ? sprintf( ' max="%d"', (int) $max ) : '';
 
 		printf(
-			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1" value="%3$s" class="small-text">%4$s</td></tr>',
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1"%5$s value="%3$s" class="small-text">%4$s</td></tr>',
 			esc_attr( $name ),
 			esc_html( $label ),
 			esc_attr( (string) max( 1, absint( $value ) ) ),
-			$description_html
+			$description_html,
+			$max_attr
 		);
 	}
 
@@ -520,13 +853,109 @@ class Monte_Mail_Queue_Admin {
 	 * @param mixed  $value Field value.
 	 * @return void
 	 */
-	private function render_text_field( $name, $label, $value ) {
+	private function render_text_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
 		printf(
-			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="text" value="%3$s" class="regular-text"></td></tr>',
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="text" value="%3$s" class="regular-text">%4$s</td></tr>',
 			esc_attr( $name ),
 			esc_html( $label ),
-			esc_attr( (string) $value )
+			esc_attr( (string) $value ),
+			$description_html
 		);
+	}
+
+	/**
+	 * Renders a checkbox settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_checkbox_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row">%2$s</th><td><label><input name="%1$s" id="%1$s" type="checkbox" value="1" %3$s> %4$s</label>%5$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			checked( 1, (int) $value, false ),
+			esc_html__( 'Enabled', 'monte-mail-queue-throttle' ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders a textarea settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_textarea_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><textarea name="%1$s" id="%1$s" rows="4" class="large-text code">%3$s</textarea>%4$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			esc_textarea( (string) $value ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders an email settings field.
+	 *
+	 * @param string $name Field name.
+	 * @param string $label Field label.
+	 * @param mixed  $value Field value.
+	 * @param string $description Optional help text shown below the field.
+	 * @return void
+	 */
+	private function render_email_field( $name, $label, $value, $description = '' ) {
+		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+
+		printf(
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="email" value="%3$s" class="regular-text">%4$s</td></tr>',
+			esc_attr( $name ),
+			esc_html( $label ),
+			esc_attr( (string) $value ),
+			$description_html
+		);
+	}
+
+	/**
+	 * Renders the sender-domain selector for test emails.
+	 *
+	 * @param array<string, mixed> $settings Saved plugin settings.
+	 * @return void
+	 */
+	private function render_sender_domain_select( array $settings ) {
+		$domains  = $this->sender_domains( (string) ( $settings['azure_sender_domains'] ?? '' ) );
+		$selected = (string) ( $settings['azure_default_domain'] ?? '' );
+
+		if ( '' === $selected && ! empty( $domains ) ) {
+			$selected = $domains[0];
+		}
+
+		echo '<tr><th scope="row"><label for="test_sender_domain">' . esc_html__( 'Sender email domain', 'monte-mail-queue-throttle' ) . '</label></th><td>';
+		echo '<select name="test_sender_domain" id="test_sender_domain">';
+
+		foreach ( $domains as $domain ) {
+			printf(
+				'<option value="%1$s" %2$s>%3$s</option>',
+				esc_attr( $domain ),
+				selected( $domain, $selected, false ),
+				esc_html( $domain )
+			);
+		}
+
+		echo '</select></td></tr>';
 	}
 
 	/**
@@ -598,6 +1027,13 @@ class Monte_Mail_Queue_Admin {
 			'recovered'      => __( 'Recovered', 'monte-mail-queue-throttle' ),
 			'encode_failed'  => __( 'Encode failed', 'monte-mail-queue-throttle' ),
 			'enqueue_failed' => __( 'Enqueue failed', 'monte-mail-queue-throttle' ),
+			'worker_locked'  => __( 'Worker locked', 'monte-mail-queue-throttle' ),
+			'throttled_minute' => __( 'Throttled minute', 'monte-mail-queue-throttle' ),
+			'throttled_hour' => __( 'Throttled hour', 'monte-mail-queue-throttle' ),
+			'azure_send_accepted' => __( 'Azure send accepted', 'monte-mail-queue-throttle' ),
+			'test_sent'      => __( 'Test sent', 'monte-mail-queue-throttle' ),
+			'test_retry'     => __( 'Test retry', 'monte-mail-queue-throttle' ),
+			'test_failed'    => __( 'Test failed', 'monte-mail-queue-throttle' ),
 			'attachment_missing' => __( 'Attachment missing', 'monte-mail-queue-throttle' ),
 		);
 
@@ -649,7 +1085,7 @@ class Monte_Mail_Queue_Admin {
 	private function requested_event_type() {
 		$event_type = isset( $_GET['event_type'] ) ? sanitize_key( wp_unslash( $_GET['event_type'] ) ) : '';
 
-		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed', 'attachment_missing' ), true ) ? $event_type : '';
+		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed', 'worker_locked', 'throttled_minute', 'throttled_hour', 'azure_send_accepted', 'test_sent', 'test_retry', 'test_failed', 'attachment_missing' ), true ) ? $event_type : '';
 	}
 
 	/**
