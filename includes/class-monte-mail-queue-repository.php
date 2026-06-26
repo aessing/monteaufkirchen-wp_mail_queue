@@ -13,6 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Persists queued mail payloads and queue events.
  */
 class Monte_Mail_Queue_Repository {
+	const WORKER_LOCK_OPTION = 'wmqt_worker_lock';
+	const WORKER_LOCK_TTL    = 900;
+
 	/**
 	 * Settings dependency.
 	 *
@@ -254,6 +257,141 @@ class Monte_Mail_Queue_Repository {
 	}
 
 	/**
+	 * Returns rolling send counts for the given transport.
+	 *
+	 * @param string $transport Transport slug.
+	 * @return array<string, int>
+	 */
+	public function send_window_usage( string $transport ): array {
+		global $wpdb;
+
+		$transport = sanitize_key( $transport );
+		$table     = $this->send_windows_table();
+		$now       = current_time( 'mysql' );
+		$row       = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT
+					SUM(CASE WHEN accepted_at >= DATE_SUB(%s, INTERVAL 60 SECOND) THEN 1 ELSE 0 END) AS minute_count,
+					SUM(CASE WHEN accepted_at >= DATE_SUB(%s, INTERVAL 3600 SECOND) THEN 1 ELSE 0 END) AS hour_count
+				FROM {$table}
+				WHERE transport = %s",
+				$now,
+				$now,
+				$transport
+			),
+			ARRAY_A
+		);
+
+		$minute_count = isset( $row['minute_count'] ) ? (int) $row['minute_count'] : 0;
+		$hour_count   = isset( $row['hour_count'] ) ? (int) $row['hour_count'] : 0;
+
+		return array(
+			'minute' => $minute_count,
+			'hour'   => $hour_count,
+		);
+	}
+
+	/**
+	 * Records a send accepted by a transport provider.
+	 *
+	 * @param int    $queue_id Queue item ID.
+	 * @param string $transport Transport slug.
+	 * @param string $provider_message_id Provider message identifier.
+	 * @return bool
+	 */
+	public function record_send_window( int $queue_id, string $transport, string $provider_message_id = '' ): bool {
+		global $wpdb;
+
+		$inserted = $wpdb->insert(
+			$this->send_windows_table(),
+			array(
+				'queue_id'             => absint( $queue_id ),
+				'transport'            => sanitize_key( $transport ),
+				'accepted_at'          => current_time( 'mysql' ),
+				'provider_message_id'  => (string) $provider_message_id,
+			),
+			array( '%d', '%s', '%s', '%s' )
+		);
+
+		return false !== $inserted;
+	}
+
+	/**
+	 * Purges old rolling send-window rows.
+	 *
+	 * @param int $hours Retention window in hours.
+	 * @return int
+	 */
+	public function purge_old_send_windows( int $hours = 48 ): int {
+		global $wpdb;
+
+		$hours = max( 1, absint( $hours ) );
+		$table = $this->send_windows_table();
+
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$table} WHERE accepted_at < DATE_SUB(%s, INTERVAL %d HOUR)",
+				current_time( 'mysql' ),
+				$hours
+			)
+		);
+
+		return false === $deleted ? 0 : (int) $deleted;
+	}
+
+	/**
+	 * Acquires a process-wide worker lock.
+	 *
+	 * @return string Lock token, or empty string when another worker owns it.
+	 */
+	public function acquire_worker_lock(): string {
+		$token = $this->worker_lock_token();
+		$now   = time();
+		$lock  = get_option( self::WORKER_LOCK_OPTION, false );
+
+		if ( false !== $lock && $this->worker_lock_is_stale( $lock, $now ) ) {
+			delete_option( self::WORKER_LOCK_OPTION );
+			$lock = false;
+		}
+
+		if ( false !== $lock ) {
+			return '';
+		}
+
+		$added = add_option(
+			self::WORKER_LOCK_OPTION,
+			array(
+				'token'      => $token,
+				'created_at' => $now,
+			),
+			'',
+			'no'
+		);
+
+		return $added ? $token : '';
+	}
+
+	/**
+	 * Releases a process-wide worker lock.
+	 *
+	 * @param string $token Lock token returned by acquire_worker_lock().
+	 * @return bool
+	 */
+	public function release_worker_lock( string $token ): bool {
+		if ( '' === $token ) {
+			return false;
+		}
+
+		$lock = get_option( self::WORKER_LOCK_OPTION, false );
+
+		if ( ! is_array( $lock ) || ! isset( $lock['token'] ) || ! hash_equals( (string) $lock['token'], $token ) ) {
+			return false;
+		}
+
+		return delete_option( self::WORKER_LOCK_OPTION );
+	}
+
+	/**
 	 * Stores a queue event.
 	 *
 	 * @param int    $queue_id Queue item ID.
@@ -276,6 +414,34 @@ class Monte_Mail_Queue_Repository {
 			),
 			array( '%d', '%s', '%s', '%s', '%s' )
 		);
+	}
+
+	/**
+	 * Builds a unique lock token.
+	 *
+	 * @return string
+	 */
+	private function worker_lock_token() {
+		if ( function_exists( 'wp_generate_uuid4' ) ) {
+			return wp_generate_uuid4();
+		}
+
+		return md5( uniqid( 'wmqt-worker-', true ) );
+	}
+
+	/**
+	 * Returns whether a persisted worker lock is expired or malformed.
+	 *
+	 * @param mixed $lock Persisted lock payload.
+	 * @param int   $now Current Unix timestamp.
+	 * @return bool
+	 */
+	private function worker_lock_is_stale( $lock, $now ) {
+		if ( ! is_array( $lock ) || empty( $lock['token'] ) || empty( $lock['created_at'] ) ) {
+			return true;
+		}
+
+		return ( $now - (int) $lock['created_at'] ) > self::WORKER_LOCK_TTL;
 	}
 
 	/**
@@ -594,6 +760,17 @@ class Monte_Mail_Queue_Repository {
 		global $wpdb;
 
 		return $wpdb->prefix . 'wmqt_logs';
+	}
+
+	/**
+	 * Returns the rolling send-window table name.
+	 *
+	 * @return string
+	 */
+	private function send_windows_table(): string {
+		global $wpdb;
+
+		return $wpdb->prefix . 'wmqt_send_windows';
 	}
 
 	/**

@@ -67,16 +67,29 @@ class Monte_Mail_Queue_Installer {
 	}
 
 	/**
+	 * Clears and re-schedules the worker event.
+	 *
+	 * @return void
+	 */
+	public function reschedule_event() {
+		wp_clear_scheduled_hook( WMQT_CRON_HOOK );
+		$this->schedule_event();
+	}
+
+	/**
 	 * Registers the custom cron schedule.
 	 *
 	 * @param array<string, array<string, mixed>> $schedules Existing schedules.
 	 * @return array<string, array<string, mixed>>
 	 */
 	public function add_cron_schedule( $schedules ) {
+		$minutes = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
+		$seconds = $minutes * MINUTE_IN_SECONDS;
+
 		if ( ! isset( $schedules[ WMQT_CRON_SCHEDULE ] ) ) {
 			$schedules[ WMQT_CRON_SCHEDULE ] = array(
-				'interval' => 120,
-				'display'  => __( 'Every two minutes', 'monte-mail-queue-throttle' ),
+				'interval' => $seconds,
+				'display'  => sprintf( __( 'Every %d minute(s)', 'monte-mail-queue-throttle' ), $minutes ),
 			);
 		}
 
@@ -96,6 +109,7 @@ class Monte_Mail_Queue_Installer {
 		$charset_collate = $wpdb->get_charset_collate();
 		$queue_table     = $wpdb->prefix . 'wmqt_queue';
 		$logs_table      = $wpdb->prefix . 'wmqt_logs';
+		$send_windows_table = $wpdb->prefix . 'wmqt_send_windows';
 
 		$queue_sql = "CREATE TABLE {$queue_table} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -134,8 +148,21 @@ class Monte_Mail_Queue_Installer {
 			KEY created_at (created_at)
 		) {$charset_collate};";
 
+		$send_windows_sql = "CREATE TABLE {$send_windows_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			queue_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			transport varchar(50) NOT NULL DEFAULT '',
+			accepted_at datetime NOT NULL,
+			provider_message_id varchar(255) NOT NULL DEFAULT '',
+			PRIMARY KEY  (id),
+			KEY accepted_at (accepted_at),
+			KEY transport_accepted_at (transport, accepted_at),
+			KEY queue_id (queue_id)
+		) {$charset_collate};";
+
 		dbDelta( $queue_sql );
 		dbDelta( $logs_sql );
+		dbDelta( $send_windows_sql );
 	}
 
 	/**
@@ -155,8 +182,10 @@ class Monte_Mail_Queue_Installer {
 	 * @return void
 	 */
 	private function schedule_event() {
+		$minutes = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
+
 		if ( ! wp_next_scheduled( WMQT_CRON_HOOK ) ) {
-			wp_schedule_event( time() + 120, WMQT_CRON_SCHEDULE, WMQT_CRON_HOOK );
+			wp_schedule_event( time() + ( $minutes * MINUTE_IN_SECONDS ), WMQT_CRON_SCHEDULE, WMQT_CRON_HOOK );
 		}
 	}
 }
