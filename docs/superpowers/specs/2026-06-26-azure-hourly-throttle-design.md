@@ -16,6 +16,7 @@ This design keeps Azure sender configuration manual for v1. The plugin stores ve
 The feature covers:
 
 - Settings for mails per minute and mails per hour.
+- A configurable worker interval so the old `rate_per_minute * 2` batch sizing can match the real WP-Cron cadence.
 - A persistent throttle window so limits are enforced across WP-Cron runs.
 - A transport switch between existing `wp_mail()` delivery and ACS Email REST delivery.
 - ACS settings needed for REST API delivery.
@@ -39,6 +40,8 @@ rate_per_minute * 2
 
 That keeps a rough send pace when WP-Cron runs regularly, but it does not enforce a true rolling minute window and it has no hourly cap. Delivery currently replays each queue item through `wp_mail()` with interception bypassed, which lets FluentSMTP or another configured WordPress mail transport send the final message.
 
+The `2` multiplier assumes the plugin worker runs every two minutes. Some hosts call `wp-cron.php` every minute, so the worker interval and batch-size multiplier need to be configurable instead of hard-coded.
+
 ## Chosen Approach
 
 Use a small send-window table to record accepted sends. Before every queued send, the worker counts recent accepted sends in the last rolling minute and last rolling hour. If either limit is reached, the worker stops processing and leaves remaining queue rows in `queued` status for the next cron run.
@@ -56,8 +59,19 @@ Settings:
 
 - `rate_per_minute`, default `25`, minimum `1`.
 - `rate_per_hour`, default `1500`, minimum `1`.
+- `worker_interval_minutes`, default `2`, minimum `1`, maximum `60`.
 
 The default hourly value equals `25 * 60`, which preserves current capacity unless the admin changes it.
+
+The worker interval controls the custom WP-Cron schedule and the maximum rows a worker run may inspect:
+
+```text
+max_items_per_run = rate_per_minute * worker_interval_minutes
+```
+
+For the target hosting setup, `worker_interval_minutes` should be set to `1` because `wp-cron.php` is called every minute. Existing installs keep the default value `2` until an administrator changes it.
+
+The rolling throttle is still the hard delivery limit. If the worker interval is greater than one minute, the worker does not burst through the minute limit and does not sleep to fill later minutes in the same request. It stops when the current rolling minute or hour limit is reached and continues on the next scheduled worker run.
 
 New table:
 
@@ -195,6 +209,7 @@ Settings page:
 
 - Keep existing queue and retention settings.
 - Add `Mails per hour` beside `Mails per minute`.
+- Add `Worker interval minutes` near the throttle settings, with help text explaining that `1` matches a real one-minute WP-Cron runner.
 - Add an Azure delivery section with enable checkbox and connection fields.
 - Add a test-mail section below settings.
 
@@ -202,6 +217,7 @@ Dashboard:
 
 - Show configured minute rate.
 - Show configured hour rate.
+- Show configured worker interval.
 - Show current rolling minute usage.
 - Show current rolling hour usage.
 - Show active transport.
@@ -264,6 +280,8 @@ The Azure REST client must not require Composer packages. It uses WordPress core
 
 Existing installs should keep their current behavior after update. Azure delivery is disabled by default, and the default hourly cap preserves the existing default rate.
 
+When `worker_interval_minutes` changes, the plugin reschedules the worker hook so the configured interval takes effect without requiring deactivate and reactivate.
+
 ## Verification
 
 Automated or command-level checks:
@@ -277,6 +295,7 @@ Manual WordPress checks when an environment is available:
 - Existing `wp_mail()` replay still works with Azure disabled.
 - Minute throttle stops sends when the rolling minute cap is reached.
 - Hour throttle stops sends when the rolling hour cap is reached.
+- Worker interval can be set to `1` and the cron schedule is rescheduled to a one-minute cadence.
 - ACS settings save correctly.
 - ACS test mail sends with configured sender and recipient.
 - ACS test mail respects and updates the throttle window.
