@@ -177,6 +177,7 @@ Logs should include:
 - `sent` for accepted sends.
 - `retry` for retryable ACS failures.
 - `failed` for final failures.
+- `worker_locked` when another queue worker already owns the worker lock.
 - `throttled_minute` when the minute window is full.
 - `throttled_hour` when the hour window is full.
 - `azure_send_accepted` with provider operation feedback when available.
@@ -274,7 +275,7 @@ Expected new files:
 
 ## Compatibility
 
-The plugin still declares PHP 7.0 support. New code must avoid PHP features newer than PHP 7.0.
+The plugin declares PHP 7.1 support. New code must avoid PHP features newer than PHP 7.1.
 
 The Azure REST client must not require Composer packages. It uses WordPress core functions and PHP built-ins only.
 

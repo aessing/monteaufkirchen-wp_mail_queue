@@ -613,7 +613,7 @@ wmqt_test( 'admin log filter allows new task six event types', function () {
 
 	$admin = new Monte_Mail_Queue_Admin( new Monte_Mail_Queue_Settings(), new Monte_Mail_Queue_Repository( new Monte_Mail_Queue_Settings() ), new WMQT_Test_Installer( new Monte_Mail_Queue_Settings() ) );
 
-	foreach ( array( 'throttled_minute', 'throttled_hour', 'azure_send_accepted', 'test_sent', 'test_retry', 'test_failed' ) as $event_type ) {
+	foreach ( array( 'worker_locked', 'throttled_minute', 'throttled_hour', 'azure_send_accepted', 'test_sent', 'test_retry', 'test_failed' ) as $event_type ) {
 		$_GET = array( 'event_type' => $event_type );
 		$method = new ReflectionMethod( 'Monte_Mail_Queue_Admin', 'requested_event_type' );
 		wmqt_assert_same( $event_type, $method->invoke( $admin ), 'requested event type allowed for ' . $event_type );

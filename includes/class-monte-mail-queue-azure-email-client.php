@@ -351,7 +351,7 @@ class Monte_Mail_Queue_Azure_Email_Client {
 	 * @return array<string, string>
 	 */
 	private function normalize_headers( $headers ) {
-		if ( ! is_array( $headers ) ) {
+		if ( ! is_array( $headers ) && ! $headers instanceof Traversable ) {
 			return array();
 		}
 

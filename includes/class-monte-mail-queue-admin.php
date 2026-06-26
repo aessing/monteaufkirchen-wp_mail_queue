@@ -1027,6 +1027,7 @@ class Monte_Mail_Queue_Admin {
 			'recovered'      => __( 'Recovered', 'monte-mail-queue-throttle' ),
 			'encode_failed'  => __( 'Encode failed', 'monte-mail-queue-throttle' ),
 			'enqueue_failed' => __( 'Enqueue failed', 'monte-mail-queue-throttle' ),
+			'worker_locked'  => __( 'Worker locked', 'monte-mail-queue-throttle' ),
 			'throttled_minute' => __( 'Throttled minute', 'monte-mail-queue-throttle' ),
 			'throttled_hour' => __( 'Throttled hour', 'monte-mail-queue-throttle' ),
 			'azure_send_accepted' => __( 'Azure send accepted', 'monte-mail-queue-throttle' ),
@@ -1084,7 +1085,7 @@ class Monte_Mail_Queue_Admin {
 	private function requested_event_type() {
 		$event_type = isset( $_GET['event_type'] ) ? sanitize_key( wp_unslash( $_GET['event_type'] ) ) : '';
 
-		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed', 'throttled_minute', 'throttled_hour', 'azure_send_accepted', 'test_sent', 'test_retry', 'test_failed', 'attachment_missing' ), true ) ? $event_type : '';
+		return in_array( $event_type, array( 'queued', 'sent', 'retry', 'failed', 'recovered', 'encode_failed', 'enqueue_failed', 'worker_locked', 'throttled_minute', 'throttled_hour', 'azure_send_accepted', 'test_sent', 'test_retry', 'test_failed', 'attachment_missing' ), true ) ? $event_type : '';
 	}
 
 	/**

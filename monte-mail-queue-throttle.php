@@ -2,10 +2,10 @@
 /**
  * Plugin Name: Monte Mail Queue Throttle
  * Plugin URI: https://www.linkedin.com/in/aessing/
- * Description: Queues WordPress mail for throttled replay through the configured wp_mail transport.
+ * Description: Queues WordPress mail for throttled replay through the configured transport.
  * Version: 0.5.0
  * Requires at least: 5.8
- * Requires PHP: 7.0
+ * Requires PHP: 7.1
  * Author: Andre Essing
  * Author URI: https://www.linkedin.com/in/aessing/
  * License: GPL-2.0-or-later

@@ -121,7 +121,7 @@ The logs view is built for audit and diagnosis:
 - Supports event filtering.
 - Uses pagination for large log tables.
 - Keeps the same related message context as the queue view.
-- Includes events such as enqueue, claim, send success, retry, failure, recovery, missing attachments, and encode failures.
+- Includes events such as enqueue, claim, worker lock skips, throttle stops, send success, Azure provider feedback, test-mail outcomes, retry, failure, recovery, missing attachments, and encode failures.
 
 ## FluentSMTP Notes
 
@@ -180,7 +180,7 @@ Upload that file directly through the WordPress plugin installer.
 ## Requirements
 
 - WordPress 5.8 or newer.
-- PHP 7.0 or newer.
+- PHP 7.1 or newer.
 - A working WordPress mail transport, such as FluentSMTP.
 - WP-Cron or an external cron runner.
 

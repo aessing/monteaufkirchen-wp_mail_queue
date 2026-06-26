@@ -6,7 +6,7 @@
 
 **Architecture:** Keep queue interception unchanged. Add a persistent send-window table for rolling throttle checks, add a focused ACS REST client, and let the worker choose between `wp_mail()` and Azure delivery. Keep Azure disabled by default so existing installs continue using their current WordPress mail transport.
 
-**Tech Stack:** WordPress plugin PHP, `$wpdb`, WP-Cron, WordPress HTTP API, PHP built-ins, no Composer dependencies, PHP 7.0 compatible code.
+**Tech Stack:** WordPress plugin PHP, `$wpdb`, WP-Cron, WordPress HTTP API, PHP built-ins, no Composer dependencies, PHP 7.1 compatible code.
 
 ## Global Constraints
 
@@ -26,7 +26,7 @@
 - ACS request signing uses endpoint and access key parsed from the connection string.
 - Use WordPress HTTP APIs, not direct cURL.
 - No Composer package requirement.
-- New code must avoid PHP features newer than PHP 7.0.
+- New code must avoid PHP features newer than PHP 7.1.
 
 ---
 
@@ -986,7 +986,7 @@ git commit --no-gpg-sign -m "feat: add azure email rest client"
 - Consumes: `Monte_Mail_Queue_Throttle_Window::record_accepted()`
 - Consumes: `Monte_Mail_Queue_Azure_Email_Client::send()`
 - Produces: worker transport setting key `azure_email_enabled`
-- Produces log events `throttled_minute`, `throttled_hour`, `azure_send_accepted`
+- Produces log events `worker_locked`, `throttled_minute`, `throttled_hour`, `azure_send_accepted`
 
 - [ ] **Step 1: Write failing worker tests**
 
@@ -1327,6 +1327,7 @@ Add these events to `render_log_filter()` and `requested_event_type()`:
 'throttled_minute'
 'throttled_hour'
 'azure_send_accepted'
+'worker_locked'
 'test_sent'
 'test_retry'
 'test_failed'

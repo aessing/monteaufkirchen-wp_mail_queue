@@ -40,6 +40,29 @@ function update_option( $name, $value ) {
 	return $changed;
 }
 
+function add_option( $name, $value, $deprecated = '', $autoload = 'yes' ) {
+	global $wmqt_test_options;
+	unset( $deprecated, $autoload );
+
+	if ( array_key_exists( $name, $wmqt_test_options ) ) {
+		return false;
+	}
+
+	$wmqt_test_options[ $name ] = $value;
+	return true;
+}
+
+function delete_option( $name ) {
+	global $wmqt_test_options;
+
+	if ( ! array_key_exists( $name, $wmqt_test_options ) ) {
+		return false;
+	}
+
+	unset( $wmqt_test_options[ $name ] );
+	return true;
+}
+
 function sanitize_key( $key ) {
 	$key = strtolower( (string) $key );
 	return preg_replace( '/[^a-z0-9_\-]/', '', $key );
@@ -84,7 +107,7 @@ function wp_remote_retrieve_response_code( $response ) {
 }
 
 function wp_remote_retrieve_headers( $response ) {
-	return isset( $response['headers'] ) && is_array( $response['headers'] ) ? $response['headers'] : array();
+	return isset( $response['headers'] ) ? $response['headers'] : array();
 }
 
 function wp_remote_retrieve_body( $response ) {

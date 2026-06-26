@@ -9,6 +9,18 @@ require_once __DIR__ . '/../includes/class-monte-mail-queue-settings.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-delivery-result.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-azure-email-client.php';
 
+class Wmqt_Test_Header_Bag implements IteratorAggregate {
+	private $headers;
+
+	public function __construct( array $headers ) {
+		$this->headers = $headers;
+	}
+
+	public function getIterator(): Traversable {
+		return new ArrayIterator( $this->headers );
+	}
+}
+
 wmqt_test( 'azure client parses connection string', function () {
 	$settings = new Monte_Mail_Queue_Settings();
 	$client   = new Monte_Mail_Queue_Azure_Email_Client( $settings );
@@ -91,6 +103,68 @@ wmqt_test( 'azure client maps retry headers', function () {
 	wmqt_assert_same( false, $result->accepted(), 'not accepted' );
 	wmqt_assert_same( true, $result->retryable(), 'retryable' );
 	wmqt_assert_same( 120, $result->retry_after_seconds(), 'retry delay' );
+} );
+
+wmqt_test( 'azure client reads retry headers from wordpress header objects', function () {
+	global $wmqt_next_remote_response;
+
+	wmqt_reset_test_state();
+	$wmqt_next_remote_response = array(
+		'response' => array( 'code' => 429 ),
+		'headers'  => new Wmqt_Test_Header_Bag( array( 'x-ms-retry-after-ms' => '2500' ) ),
+		'body'     => 'too many requests',
+	);
+
+	$settings = new Monte_Mail_Queue_Settings();
+	$settings->update(
+		array(
+			'azure_connection_string' => 'endpoint=https://example.communication.azure.com/;accesskey=' . base64_encode( 'test-key' ),
+			'azure_sender_username'   => 'DoNotReply',
+			'azure_default_domain'    => 'mailing.example.com',
+		)
+	);
+
+	$result = ( new Monte_Mail_Queue_Azure_Email_Client( $settings ) )->send(
+		array(
+			'to'      => 'user@example.com',
+			'subject' => 'Subject',
+			'message' => 'Body',
+		)
+	);
+
+	wmqt_assert_same( true, $result->retryable(), 'retryable' );
+	wmqt_assert_same( 3, $result->retry_after_seconds(), 'retry delay from millisecond header object' );
+} );
+
+wmqt_test( 'azure client reads operation id from wordpress header objects', function () {
+	global $wmqt_next_remote_response;
+
+	wmqt_reset_test_state();
+	$wmqt_next_remote_response = array(
+		'response' => array( 'code' => 202 ),
+		'headers'  => new Wmqt_Test_Header_Bag( array( 'operation-location' => 'https://example/status/object-operation-456' ) ),
+		'body'     => '',
+	);
+
+	$settings = new Monte_Mail_Queue_Settings();
+	$settings->update(
+		array(
+			'azure_connection_string' => 'endpoint=https://example.communication.azure.com/;accesskey=' . base64_encode( 'test-key' ),
+			'azure_sender_username'   => 'DoNotReply',
+			'azure_default_domain'    => 'mailing.example.com',
+		)
+	);
+
+	$result = ( new Monte_Mail_Queue_Azure_Email_Client( $settings ) )->send(
+		array(
+			'to'      => 'user@example.com',
+			'subject' => 'Subject',
+			'message' => 'Body',
+		)
+	);
+
+	wmqt_assert_same( true, $result->accepted(), 'accepted' );
+	wmqt_assert_same( 'object-operation-456', $result->provider_message_id(), 'operation id from header object' );
 } );
 
 wmqt_test( 'azure client retries invalid connection strings', function () {

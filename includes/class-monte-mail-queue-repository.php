@@ -13,6 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Persists queued mail payloads and queue events.
  */
 class Monte_Mail_Queue_Repository {
+	const WORKER_LOCK_OPTION = 'wmqt_worker_lock';
+	const WORKER_LOCK_TTL    = 900;
+
 	/**
 	 * Settings dependency.
 	 *
@@ -337,6 +340,58 @@ class Monte_Mail_Queue_Repository {
 	}
 
 	/**
+	 * Acquires a process-wide worker lock.
+	 *
+	 * @return string Lock token, or empty string when another worker owns it.
+	 */
+	public function acquire_worker_lock(): string {
+		$token = $this->worker_lock_token();
+		$now   = time();
+		$lock  = get_option( self::WORKER_LOCK_OPTION, false );
+
+		if ( false !== $lock && $this->worker_lock_is_stale( $lock, $now ) ) {
+			delete_option( self::WORKER_LOCK_OPTION );
+			$lock = false;
+		}
+
+		if ( false !== $lock ) {
+			return '';
+		}
+
+		$added = add_option(
+			self::WORKER_LOCK_OPTION,
+			array(
+				'token'      => $token,
+				'created_at' => $now,
+			),
+			'',
+			'no'
+		);
+
+		return $added ? $token : '';
+	}
+
+	/**
+	 * Releases a process-wide worker lock.
+	 *
+	 * @param string $token Lock token returned by acquire_worker_lock().
+	 * @return bool
+	 */
+	public function release_worker_lock( string $token ): bool {
+		if ( '' === $token ) {
+			return false;
+		}
+
+		$lock = get_option( self::WORKER_LOCK_OPTION, false );
+
+		if ( ! is_array( $lock ) || ! isset( $lock['token'] ) || ! hash_equals( (string) $lock['token'], $token ) ) {
+			return false;
+		}
+
+		return delete_option( self::WORKER_LOCK_OPTION );
+	}
+
+	/**
 	 * Stores a queue event.
 	 *
 	 * @param int    $queue_id Queue item ID.
@@ -359,6 +414,34 @@ class Monte_Mail_Queue_Repository {
 			),
 			array( '%d', '%s', '%s', '%s', '%s' )
 		);
+	}
+
+	/**
+	 * Builds a unique lock token.
+	 *
+	 * @return string
+	 */
+	private function worker_lock_token() {
+		if ( function_exists( 'wp_generate_uuid4' ) ) {
+			return wp_generate_uuid4();
+		}
+
+		return md5( uniqid( 'wmqt-worker-', true ) );
+	}
+
+	/**
+	 * Returns whether a persisted worker lock is expired or malformed.
+	 *
+	 * @param mixed $lock Persisted lock payload.
+	 * @param int   $now Current Unix timestamp.
+	 * @return bool
+	 */
+	private function worker_lock_is_stale( $lock, $now ) {
+		if ( ! is_array( $lock ) || empty( $lock['token'] ) || empty( $lock['created_at'] ) ) {
+			return true;
+		}
+
+		return ( $now - (int) $lock['created_at'] ) > self::WORKER_LOCK_TTL;
 	}
 
 	/**

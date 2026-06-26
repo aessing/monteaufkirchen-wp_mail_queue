@@ -80,6 +80,26 @@ class Monte_Mail_Queue_Worker {
 	 * @return void
 	 */
 	public function process_queue() {
+		$lock_token = $this->acquire_lock();
+
+		if ( '' === $lock_token ) {
+			$this->repository->log( 0, 'worker_locked', 'Worker skipped because another queue worker is already running.', '' );
+			return;
+		}
+
+		try {
+			$this->process_locked_queue();
+		} finally {
+			$this->release_lock( $lock_token );
+		}
+	}
+
+	/**
+	 * Processes one cron batch after the worker lock is held.
+	 *
+	 * @return void
+	 */
+	private function process_locked_queue() {
 		$limit    = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) * absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) );
 		$deadline = $this->deadline_timestamp();
 		$sent     = 0;
@@ -111,6 +131,35 @@ class Monte_Mail_Queue_Worker {
 
 		$this->repository->purge_old_logs();
 		$this->repository->purge_old_queue_items();
+	}
+
+	/**
+	 * Acquires a worker lock when the repository supports it.
+	 *
+	 * @return string
+	 */
+	private function acquire_lock() {
+		if ( method_exists( $this->repository, 'acquire_worker_lock' ) ) {
+			return (string) $this->repository->acquire_worker_lock();
+		}
+
+		return 'legacy-repository-lock';
+	}
+
+	/**
+	 * Releases a worker lock when the repository supports it.
+	 *
+	 * @param string $lock_token Lock token.
+	 * @return void
+	 */
+	private function release_lock( $lock_token ) {
+		if ( 'legacy-repository-lock' === $lock_token ) {
+			return;
+		}
+
+		if ( method_exists( $this->repository, 'release_worker_lock' ) ) {
+			$this->repository->release_worker_lock( $lock_token );
+		}
 	}
 
 	/**
