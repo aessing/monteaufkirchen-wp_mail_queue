@@ -38,20 +38,40 @@ class Monte_Mail_Queue_Worker {
 	private $interceptor;
 
 	/**
+	 * Throttle window dependency.
+	 *
+	 * @var mixed
+	 */
+	private $throttle_window;
+
+	/**
+	 * Azure client dependency.
+	 *
+	 * @var mixed
+	 */
+	private $azure_client;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Monte_Mail_Queue_Settings    $settings Settings dependency.
 	 * @param Monte_Mail_Queue_Repository  $repository Repository dependency.
 	 * @param Monte_Mail_Queue_Interceptor $interceptor Interceptor dependency.
+	 * @param mixed                        $throttle_window Throttle window dependency.
+	 * @param mixed                        $azure_client Azure transport dependency.
 	 */
 	public function __construct(
 		Monte_Mail_Queue_Settings $settings,
 		Monte_Mail_Queue_Repository $repository,
-		Monte_Mail_Queue_Interceptor $interceptor
+		Monte_Mail_Queue_Interceptor $interceptor,
+		$throttle_window = null,
+		$azure_client = null
 	) {
-		$this->settings    = $settings;
-		$this->repository  = $repository;
-		$this->interceptor = $interceptor;
+		$this->settings        = $settings;
+		$this->repository      = $repository;
+		$this->interceptor     = $interceptor;
+		$this->throttle_window = $throttle_window;
+		$this->azure_client    = $azure_client;
 	}
 
 	/**
@@ -60,23 +80,33 @@ class Monte_Mail_Queue_Worker {
 	 * @return void
 	 */
 	public function process_queue() {
-		$rate     = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) );
-		$minutes  = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
-		$limit    = max( 1, $rate * $minutes );
+		$limit    = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) * absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) );
 		$deadline = $this->deadline_timestamp();
 		$sent     = 0;
 
 		$this->repository->recover_stale_processing_items();
 
 		while ( $sent < $limit && time() < $deadline ) {
+			$transport = $this->transport();
+			$status    = $this->throttle_window ? $this->throttle_window->status( $transport ) : array( 'allowed' => true );
+
+			if ( empty( $status['allowed'] ) ) {
+				$this->repository->log( 0, 'minute' === $status['reason'] ? 'throttled_minute' : 'throttled_hour', $this->throttle_message( $status ), '' );
+				break;
+			}
+
 			$items = $this->repository->claim_batch( 1 );
 
 			if ( empty( $items ) ) {
 				break;
 			}
 
-			$this->process_item( $items[0] );
+			$this->process_item( $items[0], $transport );
 			$sent++;
+		}
+
+		if ( $this->throttle_window && method_exists( $this->throttle_window, 'prune' ) ) {
+			$this->throttle_window->prune();
 		}
 
 		$this->repository->purge_old_logs();
@@ -87,9 +117,10 @@ class Monte_Mail_Queue_Worker {
 	 * Replays one queued mail payload.
 	 *
 	 * @param array<string, mixed> $item Queue item.
+	 * @param string              $transport Transport slug.
 	 * @return void
 	 */
-	private function process_item( array $item ) {
+	private function process_item( array $item, $transport ) {
 		$id            = (int) ( $item['id'] ?? 0 );
 		$source_plugin = isset( $item['source_plugin'] ) ? sanitize_key( (string) $item['source_plugin'] ) : '';
 		$missing       = $this->missing_attachments( $item['attachments'] ?? array() );
@@ -99,28 +130,31 @@ class Monte_Mail_Queue_Worker {
 		}
 
 		try {
-			$this->interceptor->enable_bypass();
+			$result = $this->deliver_item( $item, $transport );
 
-			$sent = wp_mail(
-				$item['to'] ?? '',
-				(string) ( $item['subject'] ?? '' ),
-				(string) ( $item['message'] ?? '' ),
-				$item['headers'] ?? '',
-				$item['attachments'] ?? array()
-			);
+			if ( $result->accepted() ) {
+				if ( $this->throttle_window ) {
+					$this->throttle_window->record_accepted( $id, $transport, $result->provider_message_id() );
+				}
 
-			if ( true === $sent ) {
+				if ( 'azure_communication_email' === $transport && '' !== $result->provider_message_id() ) {
+					$this->repository->log( $id, 'azure_send_accepted', 'Azure accepted send operation: ' . $result->provider_message_id(), $source_plugin );
+				}
+
 				if ( $this->repository->mark_sent( $id ) ) {
 					$this->repository->log( $id, 'sent', 'Mail sent successfully.', $source_plugin );
 				}
 				return;
 			}
 
-			$this->record_failure( $item, 'wp_mail returned false.' );
+			if ( $result->retryable() ) {
+				$this->record_failure( $item, $result->error(), $result->retry_after_seconds() );
+				return;
+			}
+
+			$this->record_failure( $item, $result->error() );
 		} catch ( Throwable $throwable ) {
 			$this->record_failure( $item, $throwable->getMessage() );
-		} finally {
-			$this->interceptor->disable_bypass();
 		}
 	}
 
@@ -129,9 +163,10 @@ class Monte_Mail_Queue_Worker {
 	 *
 	 * @param array<string, mixed> $item Queue item.
 	 * @param string               $error Error message.
+	 * @param int                  $delay_seconds Delay before next retry.
 	 * @return void
 	 */
-	private function record_failure( array $item, $error ) {
+	private function record_failure( array $item, $error, $delay_seconds = 0 ) {
 		$id            = (int) ( $item['id'] ?? 0 );
 		$attempts      = (int) ( $item['attempts'] ?? 0 );
 		$max_attempts  = max( 1, (int) ( $item['max_attempts'] ?? 1 ) );
@@ -145,9 +180,77 @@ class Monte_Mail_Queue_Worker {
 			return;
 		}
 
-		if ( $this->repository->mark_retry( $id, $error, $this->retry_delay_seconds( $attempts + 1 ) ) ) {
+		$delay_seconds = absint( $delay_seconds );
+		$delay_seconds = 0 < $delay_seconds ? $delay_seconds : $this->retry_delay_seconds( $attempts + 1 );
+
+		if ( $this->repository->mark_retry( $id, $error, $delay_seconds ) ) {
 			$this->repository->log( $id, 'retry', $error, $source_plugin );
 		}
+	}
+
+	/**
+	 * Returns the active worker transport.
+	 *
+	 * @return string
+	 */
+	private function transport() {
+		return 1 === (int) $this->settings->get( 'azure_email_enabled', 0 ) ? 'azure_communication_email' : 'wp_mail';
+	}
+
+	/**
+	 * Delivers one queue item through the selected transport.
+	 *
+	 * @param array<string, mixed> $item Queue item.
+	 * @param string               $transport Transport slug.
+	 * @return Monte_Mail_Queue_Delivery_Result
+	 */
+	private function deliver_item( array $item, $transport ) {
+		if ( 'azure_communication_email' === $transport ) {
+			if ( $this->azure_client && method_exists( $this->azure_client, 'send' ) ) {
+				return $this->azure_client->send( $item );
+			}
+
+			return Monte_Mail_Queue_Delivery_Result::retry_result( 'Azure email client is not configured.' );
+		}
+
+		$this->interceptor->enable_bypass();
+
+		try {
+			$sent = wp_mail(
+				$item['to'] ?? '',
+				(string) ( $item['subject'] ?? '' ),
+				(string) ( $item['message'] ?? '' ),
+				$item['headers'] ?? '',
+				$item['attachments'] ?? array()
+			);
+
+			return true === $sent ? Monte_Mail_Queue_Delivery_Result::accepted_result( '', 0 ) : Monte_Mail_Queue_Delivery_Result::failed_result( 'wp_mail returned false.' );
+		} finally {
+			$this->interceptor->disable_bypass();
+		}
+	}
+
+	/**
+	 * Builds a throttle log message from window status.
+	 *
+	 * @param array<string, mixed> $status Throttle status.
+	 * @return string
+	 */
+	private function throttle_message( array $status ) {
+		$reason       = 'hour' === ( $status['reason'] ?? '' ) ? 'hour' : 'minute';
+		$minute_used  = isset( $status['minute_used'] ) ? (int) $status['minute_used'] : 0;
+		$hour_used    = isset( $status['hour_used'] ) ? (int) $status['hour_used'] : 0;
+		$minute_limit = isset( $status['minute_limit'] ) ? (int) $status['minute_limit'] : 0;
+		$hour_limit   = isset( $status['hour_limit'] ) ? (int) $status['hour_limit'] : 0;
+
+		return sprintf(
+			'Worker throttled by %1$s limit. Minute usage %2$d/%3$d, hour usage %4$d/%5$d.',
+			$reason,
+			$minute_used,
+			$minute_limit,
+			$hour_used,
+			$hour_limit
+		);
 	}
 
 	/**
