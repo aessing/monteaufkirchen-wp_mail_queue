@@ -339,6 +339,54 @@ wmqt_test( 'admin settings page renders new cadence and azure fields', function 
 	wmqt_assert_true( false !== strpos( $output, 'name="azure_sender_username"' ), 'azure username field rendered' );
 	wmqt_assert_true( false !== strpos( $output, 'name="azure_default_domain"' ), 'azure default domain field rendered' );
 	wmqt_assert_true( false !== strpos( $output, 'name="azure_reply_to"' ), 'azure reply-to field rendered' );
+	wmqt_assert_true( false !== strpos( $output, 'name="worker_interval_minutes"' ), 'worker interval field rendered' );
+	wmqt_assert_true( false !== strpos( $output, 'max="60"' ), 'worker interval field capped at sixty minutes' );
+} );
+
+wmqt_test( 'admin dashboard shows cadence-based per-run limit and worker interval', function () {
+	wmqt_reset_test_runtime();
+
+	$settings = new Monte_Mail_Queue_Settings();
+	$settings->update(
+		array(
+			'rate_per_minute'        => 4,
+			'worker_interval_minutes' => 7,
+		)
+	);
+
+	$repository = new class extends Monte_Mail_Queue_Repository {
+		public function counts() {
+			return array(
+				'queued'     => 2,
+				'processing' => 1,
+				'sent'       => 9,
+				'failed'     => 0,
+			);
+		}
+
+		public function daily_status_counts( $days ) {
+			unset( $days );
+			return array();
+		}
+
+		public function queue_items_count( $status ) {
+			unset( $status );
+			return 0;
+		}
+
+		public function queue_items( $status, $limit, $offset = 0 ) {
+			unset( $status, $limit, $offset );
+			return array();
+		}
+	};
+	$admin      = new Monte_Mail_Queue_Admin( $settings, $repository, new WMQT_Test_Installer( $settings ) );
+
+	ob_start();
+	$admin->render_dashboard();
+	$output = ob_get_clean();
+
+	wmqt_assert_true( false !== strpos( $output, '28' ), 'per-run limit uses worker interval' );
+	wmqt_assert_true( false !== strpos( $output, '7 minutes' ), 'worker interval card rendered' );
 } );
 
 wmqt_test( 'plugin admin uses shared installer instance', function () {

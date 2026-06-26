@@ -60,14 +60,16 @@ class Monte_Mail_Queue_Worker {
 	 * @return void
 	 */
 	public function process_queue() {
-		$limit    = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) * 2 );
+		$rate     = max( 1, absint( $this->settings->get( 'rate_per_minute', 25 ) ) );
+		$minutes  = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minutes', 2 ) ) ) );
+		$limit    = max( 1, $rate * $minutes );
 		$deadline = $this->deadline_timestamp();
 		$sent     = 0;
 
 		$this->repository->recover_stale_processing_items();
 
 		while ( $sent < $limit && time() < $deadline ) {
-			$items = $this->repository->claim_batch( 1 );
+			$items = $this->repository->claim_batch( $limit - $sent );
 
 			if ( empty( $items ) ) {
 				break;

@@ -154,7 +154,8 @@ class Monte_Mail_Queue_Admin {
 		$counts        = $this->repository->counts();
 		$settings      = $this->settings->get_all();
 		$rate          = max( 1, absint( $settings['rate_per_minute'] ?? 25 ) );
-		$per_run_limit = $rate * 2;
+		$interval      = max( 1, min( 60, absint( $settings['worker_interval_minutes'] ?? 2 ) ) );
+		$per_run_limit = $rate * $interval;
 		$next_cron     = wp_next_scheduled( WMQT_CRON_HOOK );
 		$chart_data    = $this->repository->daily_status_counts( 30 );
 		$active_total  = $this->repository->queue_items_count( 'active' );
@@ -165,6 +166,7 @@ class Monte_Mail_Queue_Admin {
 			array( __( 'Sent', 'monte-mail-queue-throttle' ), (int) ( $counts['sent'] ?? 0 ) ),
 			array( __( 'Failed', 'monte-mail-queue-throttle' ), (int) ( $counts['failed'] ?? 0 ) ),
 			array( __( 'Configured rate', 'monte-mail-queue-throttle' ), sprintf( _n( '%d mail/min', '%d mails/min', $rate, 'monte-mail-queue-throttle' ), $rate ) ),
+			array( __( 'Worker interval', 'monte-mail-queue-throttle' ), sprintf( _n( '%d minute', '%d minutes', $interval, 'monte-mail-queue-throttle' ), $interval ) ),
 			array( __( 'Per-run limit', 'monte-mail-queue-throttle' ), $per_run_limit ),
 			array( __( 'Next cron', 'monte-mail-queue-throttle' ), $this->format_timestamp( $next_cron ) ),
 		);
@@ -217,7 +219,7 @@ class Monte_Mail_Queue_Admin {
 		echo '<table class="form-table" role="presentation"><tbody>';
 		$this->render_number_field( 'rate_per_minute', __( 'Mails per minute', 'monte-mail-queue-throttle' ), $settings['rate_per_minute'] ?? 25 );
 		$this->render_number_field( 'rate_per_hour', __( 'Mails per hour', 'monte-mail-queue-throttle' ), $settings['rate_per_hour'] ?? 1500 );
-		$this->render_number_field( 'worker_interval_minutes', __( 'Worker interval minutes', 'monte-mail-queue-throttle' ), $settings['worker_interval_minutes'] ?? 2, __( 'Set to 1 when wp-cron.php is called every minute.', 'monte-mail-queue-throttle' ) );
+		$this->render_number_field( 'worker_interval_minutes', __( 'Worker interval minutes', 'monte-mail-queue-throttle' ), $settings['worker_interval_minutes'] ?? 2, __( 'Set to 1 when wp-cron.php is called every minute.', 'monte-mail-queue-throttle' ), 60 );
 		$this->render_number_field( 'max_attempts', __( 'Max retries', 'monte-mail-queue-throttle' ), $settings['max_attempts'] ?? 3 );
 		$this->render_queue_mode_field( (string) ( $settings['queue_mode'] ?? 'all' ) );
 		$this->render_text_field( 'allowed_plugins', __( 'Allowed plugin slugs', 'monte-mail-queue-throttle' ), $settings['allowed_plugins'] ?? '' );
@@ -531,17 +533,20 @@ class Monte_Mail_Queue_Admin {
 	 * @param string $label Field label.
 	 * @param mixed  $value Field value.
 	 * @param string $description Optional help text shown below the field.
+	 * @param int    $max Optional maximum value.
 	 * @return void
 	 */
-	private function render_number_field( $name, $label, $value, $description = '' ) {
+	private function render_number_field( $name, $label, $value, $description = '', $max = 0 ) {
 		$description_html = '' !== $description ? '<p class="description">' . esc_html( $description ) . '</p>' : '';
+		$max_attr         = 0 < (int) $max ? sprintf( ' max="%d"', (int) $max ) : '';
 
 		printf(
-			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1" value="%3$s" class="small-text">%4$s</td></tr>',
+			'<tr><th scope="row"><label for="%1$s">%2$s</label></th><td><input name="%1$s" id="%1$s" type="number" min="1"%5$s value="%3$s" class="small-text">%4$s</td></tr>',
 			esc_attr( $name ),
 			esc_html( $label ),
 			esc_attr( (string) max( 1, absint( $value ) ) ),
-			$description_html
+			$description_html,
+			$max_attr
 		);
 	}
 
