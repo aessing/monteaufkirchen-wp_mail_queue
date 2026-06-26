@@ -69,7 +69,7 @@ class Monte_Mail_Queue_Worker {
 		$this->repository->recover_stale_processing_items();
 
 		while ( $sent < $limit && time() < $deadline ) {
-			$items = $this->repository->claim_batch( $limit - $sent );
+			$items = $this->repository->claim_batch( 1 );
 
 			if ( empty( $items ) ) {
 				break;
