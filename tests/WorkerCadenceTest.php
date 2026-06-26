@@ -32,7 +32,7 @@ class WMQT_Worker_Test_Repository extends Monte_Mail_Queue_Repository {
 		$this->items = $items;
 	}
 
-	public function recover_stale_processing_items() {
+	public function recover_stale_processing_items(): void {
 		$this->recovered++;
 	}
 
@@ -91,12 +91,14 @@ class WMQT_Worker_Test_Repository extends Monte_Mail_Queue_Repository {
 		);
 	}
 
-	public function purge_old_logs() {
+	public function purge_old_logs(): int {
 		$this->purged_logs++;
+		return 0;
 	}
 
-	public function purge_old_queue_items() {
+	public function purge_old_queue_items(): int {
 		$this->purged_queue++;
+		return 0;
 	}
 }
 

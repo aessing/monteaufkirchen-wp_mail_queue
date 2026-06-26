@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/bootstrap.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-settings.php';
+require_once __DIR__ . '/../includes/class-monte-mail-queue-repository.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-throttle-window.php';
 
 class Wmqt_Fake_Window_Repository extends Monte_Mail_Queue_Repository {

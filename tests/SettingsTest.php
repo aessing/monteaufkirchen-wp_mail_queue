@@ -160,11 +160,9 @@ function wp_clear_scheduled_hook( $hook ) {
 	unset( $wmqt_test_cron['scheduled'][ $hook ] );
 }
 
-class Monte_Mail_Queue_Repository {
-}
-
 require_once __DIR__ . '/../includes/class-monte-mail-queue-settings.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-installer.php';
+require_once __DIR__ . '/../includes/class-monte-mail-queue-repository.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-admin.php';
 require_once __DIR__ . '/../includes/class-monte-mail-queue-plugin.php';
 
@@ -288,7 +286,7 @@ wmqt_test( 'admin save reschedules only when worker interval changes', function 
 		)
 	);
 	$installer = new WMQT_Test_Installer( $settings );
-	$admin     = new Monte_Mail_Queue_Admin( $settings, new Monte_Mail_Queue_Repository(), $installer );
+	$admin     = new Monte_Mail_Queue_Admin( $settings, new Monte_Mail_Queue_Repository( $settings ), $installer );
 
 	$_POST = array(
 		'wmqt_settings_nonce'      => 'nonce',
@@ -325,7 +323,7 @@ wmqt_test( 'admin settings page renders new cadence and azure fields', function 
 
 	$settings  = new Monte_Mail_Queue_Settings();
 	$installer = new WMQT_Test_Installer( $settings );
-	$admin     = new Monte_Mail_Queue_Admin( $settings, new Monte_Mail_Queue_Repository(), $installer );
+	$admin     = new Monte_Mail_Queue_Admin( $settings, new Monte_Mail_Queue_Repository( $settings ), $installer );
 
 	ob_start();
 	$admin->render_settings();
@@ -354,8 +352,8 @@ wmqt_test( 'admin dashboard shows cadence-based per-run limit and worker interva
 		)
 	);
 
-	$repository = new class extends Monte_Mail_Queue_Repository {
-		public function counts() {
+	$repository = new class( $settings ) extends Monte_Mail_Queue_Repository {
+		public function counts(): array {
 			return array(
 				'queued'     => 2,
 				'processing' => 1,
@@ -364,17 +362,17 @@ wmqt_test( 'admin dashboard shows cadence-based per-run limit and worker interva
 			);
 		}
 
-		public function daily_status_counts( $days ) {
+		public function daily_status_counts( int $days = 30 ): array {
 			unset( $days );
 			return array();
 		}
 
-		public function queue_items_count( $status ) {
+		public function queue_items_count( string $status = 'active' ): int {
 			unset( $status );
 			return 0;
 		}
 
-		public function queue_items( $status, $limit, $offset = 0 ) {
+		public function queue_items( string $status = 'active', int $limit = 100, int $offset = 0 ): array {
 			unset( $status, $limit, $offset );
 			return array();
 		}
