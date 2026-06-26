@@ -34,6 +34,7 @@
 
 - `tests/bootstrap.php`: Minimal WordPress function stubs and test globals.
 - `tests/run.php`: Small PHP test runner for unit-style tests without WordPress.
+- `tests/HarnessTest.php`: Sanity test proving the lightweight test harness runs.
 - `tests/SettingsTest.php`: Tests for new settings defaults and sanitization.
 - `tests/ThrottleWindowTest.php`: Tests for rolling minute and hour decisions.
 - `tests/AzureEmailClientTest.php`: Tests for ACS connection parsing, payload mapping, and retry result mapping.
@@ -59,7 +60,7 @@
 **Files:**
 - Create: `tests/bootstrap.php`
 - Create: `tests/run.php`
-- Create: `tests/SettingsTest.php`
+- Create: `tests/HarnessTest.php`
 
 **Interfaces:**
 - Produces: `wmqt_test(string $name, callable $callback)`
@@ -67,6 +68,156 @@
 - Produces: `wmqt_assert_true($actual, string $message = '')`
 - Produces: `wmqt_reset_test_state()`
 - Produces: global `$wmqt_test_options`
+
+- [ ] **Step 1: Create the test runner and stubs**
+
+Create `tests/bootstrap.php` with these stubs and assertions:
+
+```php
+<?php
+$wmqt_tests        = array();
+$wmqt_test_options = array();
+
+function wmqt_test( $name, callable $callback ) {
+	global $wmqt_tests;
+	$wmqt_tests[] = array( $name, $callback );
+}
+
+function wmqt_assert_same( $expected, $actual, $message = '' ) {
+	if ( $expected !== $actual ) {
+		throw new Exception( ( '' !== $message ? $message . ': ' : '' ) . 'expected ' . var_export( $expected, true ) . ', got ' . var_export( $actual, true ) );
+	}
+}
+
+function wmqt_assert_true( $actual, $message = '' ) {
+	if ( true !== (bool) $actual ) {
+		throw new Exception( '' !== $message ? $message : 'expected true' );
+	}
+}
+
+function wmqt_reset_test_state() {
+	global $wmqt_test_options;
+	$wmqt_test_options = array();
+}
+
+function get_option( $name, $default = false ) {
+	global $wmqt_test_options;
+	return array_key_exists( $name, $wmqt_test_options ) ? $wmqt_test_options[ $name ] : $default;
+}
+
+function update_option( $name, $value ) {
+	global $wmqt_test_options;
+	$changed                    = ! array_key_exists( $name, $wmqt_test_options ) || $wmqt_test_options[ $name ] !== $value;
+	$wmqt_test_options[ $name ] = $value;
+	return $changed;
+}
+
+function sanitize_key( $key ) {
+	$key = strtolower( (string) $key );
+	return preg_replace( '/[^a-z0-9_\-]/', '', $key );
+}
+
+function sanitize_title( $title ) {
+	$title = strtolower( trim( (string) $title ) );
+	$title = preg_replace( '/[^a-z0-9_\-]+/', '-', $title );
+	return trim( $title, '-' );
+}
+
+function sanitize_text_field( $value ) {
+	return trim( preg_replace( '/[\r\n\t]+/', ' ', (string) $value ) );
+}
+
+function sanitize_email( $email ) {
+	return trim( (string) $email );
+}
+
+function absint( $value ) {
+	return abs( (int) $value );
+}
+
+if ( ! defined( 'WMQT_OPTION_NAME' ) ) {
+	define( 'WMQT_OPTION_NAME', 'wmqt_settings' );
+}
+```
+
+Create `tests/HarnessTest.php`:
+
+```php
+<?php
+require_once __DIR__ . '/bootstrap.php';
+
+wmqt_test( 'test harness records and runs assertions', function () {
+	wmqt_assert_same( 'ok', 'ok', 'same assertion' );
+	wmqt_assert_true( true, 'truth assertion' );
+} );
+```
+
+Create `tests/run.php`:
+
+```php
+<?php
+foreach ( glob( __DIR__ . '/*Test.php' ) as $test_file ) {
+	require_once $test_file;
+}
+
+global $wmqt_tests;
+$failures = 0;
+
+foreach ( $wmqt_tests as $test ) {
+	try {
+		call_user_func( $test[1] );
+		echo "PASS {$test[0]}\n";
+	} catch ( Throwable $throwable ) {
+		$failures++;
+		echo "FAIL {$test[0]}: {$throwable->getMessage()}\n";
+	}
+}
+
+if ( 0 < $failures ) {
+	exit( 1 );
+}
+```
+
+- [ ] **Step 2: Run tests to verify the harness passes**
+
+Run:
+
+```bash
+php tests/run.php
+```
+
+Expected: `PASS test harness records and runs assertions`.
+
+- [ ] **Step 3: Commit the passing harness**
+
+Run:
+
+```bash
+git add tests/bootstrap.php tests/run.php tests/HarnessTest.php
+git commit --no-gpg-sign -m "test: add php test harness"
+```
+
+---
+
+### Task 2: Add Settings And Configurable Worker Cadence
+
+**Files:**
+- Modify: `includes/class-monte-mail-queue-settings.php`
+- Modify: `includes/class-monte-mail-queue-installer.php`
+- Modify: `includes/class-monte-mail-queue-admin.php`
+- Modify: `includes/class-monte-mail-queue-plugin.php`
+- Modify: `tests/SettingsTest.php`
+
+**Interfaces:**
+- Produces setting key: `rate_per_hour`
+- Produces setting key: `worker_interval_minutes`
+- Produces setting key: `azure_email_enabled`
+- Produces setting key: `azure_connection_string`
+- Produces setting key: `azure_sender_domains`
+- Produces setting key: `azure_sender_username`
+- Produces setting key: `azure_default_domain`
+- Produces setting key: `azure_reply_to`
+- Produces: `Monte_Mail_Queue_Installer::reschedule_event()`
 
 - [ ] **Step 1: Write failing settings tests**
 
@@ -122,102 +273,7 @@ wmqt_test( 'settings sanitize worker cadence and azure fields', function () {
 } );
 ```
 
-- [ ] **Step 2: Create the test runner and stubs**
-
-Create `tests/bootstrap.php` with these stubs and assertions:
-
-```php
-<?php
-$wmqt_tests        = array();
-$wmqt_test_options = array();
-
-function wmqt_test( $name, callable $callback ) {
-	global $wmqt_tests;
-	$wmqt_tests[] = array( $name, $callback );
-}
-
-function wmqt_assert_same( $expected, $actual, $message = '' ) {
-	if ( $expected !== $actual ) {
-		throw new Exception( ( '' !== $message ? $message . ': ' : '' ) . 'expected ' . var_export( $expected, true ) . ', got ' . var_export( $actual, true ) );
-	}
-}
-
-function wmqt_assert_true( $actual, $message = '' ) {
-	if ( true !== (bool) $actual ) {
-		throw new Exception( '' !== $message ? $message : 'expected true' );
-	}
-}
-
-function wmqt_reset_test_state() {
-	global $wmqt_test_options;
-	$wmqt_test_options = array();
-}
-
-function get_option( $name, $default = false ) {
-	global $wmqt_test_options;
-	return array_key_exists( $name, $wmqt_test_options ) ? $wmqt_test_options[ $name ] : $default;
-}
-
-function update_option( $name, $value ) {
-	global $wmqt_test_options;
-	$changed                   = ! array_key_exists( $name, $wmqt_test_options ) || $wmqt_test_options[ $name ] !== $value;
-	$wmqt_test_options[ $name ] = $value;
-	return $changed;
-}
-
-function sanitize_key( $key ) {
-	$key = strtolower( (string) $key );
-	return preg_replace( '/[^a-z0-9_\-]/', '', $key );
-}
-
-function sanitize_title( $title ) {
-	$title = strtolower( trim( (string) $title ) );
-	$title = preg_replace( '/[^a-z0-9_\-]+/', '-', $title );
-	return trim( $title, '-' );
-}
-
-function sanitize_text_field( $value ) {
-	return trim( preg_replace( '/[\r\n\t]+/', ' ', (string) $value ) );
-}
-
-function sanitize_email( $email ) {
-	return trim( (string) $email );
-}
-
-function absint( $value ) {
-	return abs( (int) $value );
-}
-
-if ( ! defined( 'WMQT_OPTION_NAME' ) ) {
-	define( 'WMQT_OPTION_NAME', 'wmqt_settings' );
-}
-```
-
-Create `tests/run.php`:
-
-```php
-<?php
-require_once __DIR__ . '/SettingsTest.php';
-
-global $wmqt_tests;
-$failures = 0;
-
-foreach ( $wmqt_tests as $test ) {
-	try {
-		call_user_func( $test[1] );
-		echo "PASS {$test[0]}\n";
-	} catch ( Throwable $throwable ) {
-		$failures++;
-		echo "FAIL {$test[0]}: {$throwable->getMessage()}\n";
-	}
-}
-
-if ( 0 < $failures ) {
-	exit( 1 );
-}
-```
-
-- [ ] **Step 3: Run tests to verify RED**
+- [ ] **Step 2: Run settings tests to verify RED**
 
 Run:
 
@@ -227,38 +283,7 @@ php tests/run.php
 
 Expected: FAIL because settings do not yet expose `rate_per_hour`, `worker_interval_minutes`, or Azure settings.
 
-- [ ] **Step 4: Commit the failing tests and harness**
-
-Run:
-
-```bash
-git add tests/bootstrap.php tests/run.php tests/SettingsTest.php
-git commit --no-gpg-sign -m "test: add php test harness"
-```
-
----
-
-### Task 2: Add Settings And Configurable Worker Cadence
-
-**Files:**
-- Modify: `includes/class-monte-mail-queue-settings.php`
-- Modify: `includes/class-monte-mail-queue-installer.php`
-- Modify: `includes/class-monte-mail-queue-admin.php`
-- Modify: `includes/class-monte-mail-queue-plugin.php`
-- Modify: `tests/SettingsTest.php`
-
-**Interfaces:**
-- Produces setting key: `rate_per_hour`
-- Produces setting key: `worker_interval_minutes`
-- Produces setting key: `azure_email_enabled`
-- Produces setting key: `azure_connection_string`
-- Produces setting key: `azure_sender_domains`
-- Produces setting key: `azure_sender_username`
-- Produces setting key: `azure_default_domain`
-- Produces setting key: `azure_reply_to`
-- Produces: `Monte_Mail_Queue_Installer::reschedule_event()`
-
-- [ ] **Step 1: Implement settings sanitization**
+- [ ] **Step 3: Implement settings sanitization**
 
 Modify `Monte_Mail_Queue_Settings::$defaults` to include:
 
@@ -316,7 +341,7 @@ private function sanitize_domain( $value ) {
 }
 ```
 
-- [ ] **Step 2: Run settings tests to verify GREEN**
+- [ ] **Step 4: Run settings tests to verify GREEN**
 
 Run:
 
@@ -326,7 +351,7 @@ php tests/run.php
 
 Expected: PASS for both settings tests.
 
-- [ ] **Step 3: Add installer cadence methods**
+- [ ] **Step 5: Add installer cadence methods**
 
 Modify `Monte_Mail_Queue_Installer::add_cron_schedule()` so the schedule interval is:
 
@@ -353,7 +378,7 @@ $minutes = max( 1, min( 60, absint( $this->settings->get( 'worker_interval_minut
 wp_schedule_event( time() + ( $minutes * MINUTE_IN_SECONDS ), WMQT_CRON_SCHEDULE, WMQT_CRON_HOOK );
 ```
 
-- [ ] **Step 4: Wire admin save to reschedule on interval change**
+- [ ] **Step 6: Wire admin save to reschedule on interval change**
 
 Modify `Monte_Mail_Queue_Admin` constructor to accept `Monte_Mail_Queue_Installer $installer`, store it, and update `Monte_Mail_Queue_Plugin::admin()` to pass `$this->installer`.
 
@@ -374,7 +399,7 @@ if ( (int) $previous['worker_interval_minutes'] !== (int) $current['worker_inter
 
 Add posted fields for `rate_per_hour`, `worker_interval_minutes`, and the Azure settings to the update array.
 
-- [ ] **Step 5: Render new settings fields**
+- [ ] **Step 7: Render new settings fields**
 
 In `render_settings()`, add number fields:
 
@@ -426,7 +451,7 @@ private function render_email_field( $name, $label, $value, $description = '' ) 
 
 Use them for Azure settings.
 
-- [ ] **Step 6: Run syntax and tests**
+- [ ] **Step 8: Run syntax and tests**
 
 Run:
 
@@ -437,7 +462,7 @@ find . -name '*.php' -print0 | xargs -0 -n1 php -l
 
 Expected: all tests pass and all PHP files report no syntax errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 Run:
 
