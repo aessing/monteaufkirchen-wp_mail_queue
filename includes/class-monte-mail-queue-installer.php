@@ -109,6 +109,7 @@ class Monte_Mail_Queue_Installer {
 		$charset_collate = $wpdb->get_charset_collate();
 		$queue_table     = $wpdb->prefix . 'wmqt_queue';
 		$logs_table      = $wpdb->prefix . 'wmqt_logs';
+		$send_windows_table = $wpdb->prefix . 'wmqt_send_windows';
 
 		$queue_sql = "CREATE TABLE {$queue_table} (
 			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -147,8 +148,21 @@ class Monte_Mail_Queue_Installer {
 			KEY created_at (created_at)
 		) {$charset_collate};";
 
+		$send_windows_sql = "CREATE TABLE {$send_windows_table} (
+			id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+			queue_id bigint(20) unsigned NOT NULL DEFAULT 0,
+			transport varchar(50) NOT NULL DEFAULT '',
+			accepted_at datetime NOT NULL,
+			provider_message_id varchar(255) NOT NULL DEFAULT '',
+			PRIMARY KEY  (id),
+			KEY accepted_at (accepted_at),
+			KEY transport_accepted_at (transport, accepted_at),
+			KEY queue_id (queue_id)
+		) {$charset_collate};";
+
 		dbDelta( $queue_sql );
 		dbDelta( $logs_sql );
+		dbDelta( $send_windows_sql );
 	}
 
 	/**

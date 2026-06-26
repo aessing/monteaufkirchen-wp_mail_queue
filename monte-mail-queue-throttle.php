@@ -29,6 +29,7 @@ define( 'WMQT_CRON_HOOK', 'wmqt_process_queue' );
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-settings.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-installer.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-repository.php';
+require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-throttle-window.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-source-detector.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-interceptor.php';
 require_once WMQT_PLUGIN_DIR . 'includes/class-monte-mail-queue-worker.php';

@@ -1,7 +1,8 @@
 <?php
-foreach ( glob( __DIR__ . '/*Test.php' ) as $test_file ) {
-	require_once $test_file;
-}
+require_once __DIR__ . '/HarnessTest.php';
+require_once __DIR__ . '/SettingsTest.php';
+require_once __DIR__ . '/ThrottleWindowTest.php';
+require_once __DIR__ . '/WorkerCadenceTest.php';
 
 global $wmqt_tests;
 $failures = 0;
