@@ -518,6 +518,96 @@ wmqt_test( 'admin test mail uses azure transport overrides and records usage', f
 	wmqt_assert_same( 'test_sent', $repository->logs[0][1], 'azure test mail success logged' );
 } );
 
+wmqt_test( 'admin test mail rejects manipulated sender domain before sending', function () {
+	wmqt_reset_test_runtime();
+
+	$settings = new Monte_Mail_Queue_Settings();
+	$settings->update(
+		array(
+			'azure_email_enabled'   => 1,
+			'azure_sender_domains'  => 'mailing.example.com, second.example.com',
+			'azure_default_domain'  => 'mailing.example.com',
+			'azure_sender_username' => 'DoNotReply',
+		)
+	);
+
+	$repository = new class( $settings ) extends Monte_Mail_Queue_Repository {
+		public $logs = array();
+
+		public function log( int $queue_id, string $event_type, string $message, string $source_plugin = '' ): void {
+			$this->logs[] = array( $queue_id, $event_type, $message, $source_plugin );
+		}
+	};
+	$azure      = new class() {
+		public $calls = array();
+
+		public function send( array $mail, array $overrides = array() ) {
+			$this->calls[] = array( 'mail' => $mail, 'overrides' => $overrides );
+			return Monte_Mail_Queue_Delivery_Result::accepted_result( 'op-test', 202 );
+		}
+	};
+	$admin      = new Monte_Mail_Queue_Admin( $settings, $repository, new WMQT_Test_Installer( $settings ), null, $azure );
+
+	$_POST = array(
+		'wmqt_test_mail_nonce' => 'nonce',
+		'test_sender_domain'   => 'attacker.example.net',
+		'test_sender_username' => 'QueueTest',
+		'test_recipient'       => 'recipient@example.com',
+		'test_subject'         => 'Azure test',
+		'test_body'            => 'Hello world via email.',
+	);
+
+	$method = new ReflectionMethod( 'Monte_Mail_Queue_Admin', 'send_test_mail' );
+	$method->invoke( $admin );
+
+	wmqt_assert_same( array(), $azure->calls, 'azure send skipped for invalid domain' );
+	wmqt_assert_same( 'test_failed', $repository->logs[0][1], 'invalid domain logged as failed' );
+	wmqt_assert_same( 0, $repository->logs[0][0], 'invalid domain uses queue id zero' );
+
+	global $wmqt_test_messages;
+	wmqt_assert_same( 'wmqt_test_mail_failed', $wmqt_test_messages[0]['code'], 'settings error added for invalid domain' );
+} );
+
+wmqt_test( 'admin test mail ignores manipulated attachment tmp path', function () {
+	wmqt_reset_test_runtime();
+
+	global $wmqt_test_sent_mail;
+
+	$settings = new Monte_Mail_Queue_Settings();
+	$repository = new class( $settings ) extends Monte_Mail_Queue_Repository {
+		public $logs = array();
+
+		public function log( int $queue_id, string $event_type, string $message, string $source_plugin = '' ): void {
+			$this->logs[] = array( $queue_id, $event_type, $message, $source_plugin );
+		}
+	};
+	$admin      = new Monte_Mail_Queue_Admin( $settings, $repository, new WMQT_Test_Installer( $settings ) );
+	$tmp_path = tempnam( sys_get_temp_dir(), 'wmqt-attachment-' );
+
+	file_put_contents( $tmp_path, 'not-an-upload' );
+
+	$_POST = array(
+		'wmqt_test_mail_nonce' => 'nonce',
+		'test_recipient'       => 'recipient@example.com',
+		'test_subject'         => 'Attachment test',
+		'test_body'            => 'Hello world via email.',
+	);
+	$_FILES = array(
+		'test_attachment' => array(
+			'error'    => UPLOAD_ERR_OK,
+			'tmp_name' => $tmp_path,
+		),
+	);
+
+	$method = new ReflectionMethod( 'Monte_Mail_Queue_Admin', 'send_test_mail' );
+	$method->invoke( $admin );
+
+	wmqt_assert_same( array(), $wmqt_test_sent_mail[0]['attachments'], 'invalid upload path omitted from attachments' );
+	wmqt_assert_true( file_exists( $tmp_path ), 'invalid upload path not deleted' );
+
+	unlink( $tmp_path );
+} );
+
 wmqt_test( 'admin log filter allows new task six event types', function () {
 	wmqt_reset_test_runtime();
 

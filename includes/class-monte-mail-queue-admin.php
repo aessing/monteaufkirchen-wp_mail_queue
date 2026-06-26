@@ -495,18 +495,80 @@ class Monte_Mail_Queue_Admin {
 	}
 
 	/**
+	 * Resolves the sender domain for a manual test send.
+	 *
+	 * @param array<string, mixed> $settings Saved plugin settings.
+	 * @param string               $posted_domain Sender domain from the request.
+	 * @return array{valid: bool, domain: string}
+	 */
+	private function resolve_test_sender_domain( array $settings, $posted_domain ) {
+		$domains        = $this->sender_domains( (string) ( $settings['azure_sender_domains'] ?? '' ) );
+		$posted_domain  = sanitize_text_field( $posted_domain );
+		$default_domain = sanitize_text_field( (string) ( $settings['azure_default_domain'] ?? '' ) );
+
+		if ( '' !== $posted_domain ) {
+			return array(
+				'valid'  => in_array( $posted_domain, $domains, true ),
+				'domain' => $posted_domain,
+			);
+		}
+
+		if ( '' !== $default_domain && in_array( $default_domain, $domains, true ) ) {
+			return array(
+				'valid'  => true,
+				'domain' => $default_domain,
+			);
+		}
+
+		return array(
+			'valid'  => true,
+			'domain' => ! empty( $domains ) ? (string) $domains[0] : '',
+		);
+	}
+
+	/**
 	 * Returns the uploaded temporary file path for the test attachment.
 	 *
 	 * @return string
 	 */
 	private function uploaded_test_attachment_path() {
+		if ( empty( $_FILES['test_attachment'] ) || ! is_array( $_FILES['test_attachment'] ) ) {
+			return '';
+		}
+
+		if ( UPLOAD_ERR_OK !== (int) ( $_FILES['test_attachment']['error'] ?? UPLOAD_ERR_NO_FILE ) ) {
+			return '';
+		}
+
 		if ( empty( $_FILES['test_attachment']['tmp_name'] ) ) {
 			return '';
 		}
 
 		$path = (string) $_FILES['test_attachment']['tmp_name'];
 
-		return file_exists( $path ) ? $path : '';
+		return $this->is_uploaded_test_file( $path ) ? $path : '';
+	}
+
+	/**
+	 * Checks whether the provided path is a valid uploaded test attachment.
+	 *
+	 * @param string $path Candidate temp path.
+	 * @return bool
+	 */
+	protected function is_uploaded_test_file( $path ) {
+		return '' !== $path && is_uploaded_file( $path );
+	}
+
+	/**
+	 * Deletes a validated uploaded test attachment temp file.
+	 *
+	 * @param string $path Temp path to remove.
+	 * @return void
+	 */
+	protected function delete_uploaded_test_file( $path ) {
+		if ( '' !== $path && file_exists( $path ) ) {
+			@unlink( $path );
+		}
 	}
 
 	/**
@@ -561,11 +623,13 @@ class Monte_Mail_Queue_Admin {
 
 		$settings        = $this->settings->get_all();
 		$transport       = 1 === (int) ( $settings['azure_email_enabled'] ?? 0 ) ? 'azure_communication_email' : 'wp_mail';
-		$sender_domain   = isset( $_POST['test_sender_domain'] ) ? sanitize_text_field( wp_unslash( $_POST['test_sender_domain'] ) ) : (string) ( $settings['azure_default_domain'] ?? '' );
+		$sender_domain   = isset( $_POST['test_sender_domain'] ) ? (string) wp_unslash( $_POST['test_sender_domain'] ) : '';
 		$sender_username = isset( $_POST['test_sender_username'] ) ? sanitize_text_field( wp_unslash( $_POST['test_sender_username'] ) ) : (string) ( $settings['azure_sender_username'] ?? 'DoNotReply' );
 		$recipient       = isset( $_POST['test_recipient'] ) ? sanitize_email( wp_unslash( $_POST['test_recipient'] ) ) : '';
 		$subject         = isset( $_POST['test_subject'] ) ? sanitize_text_field( wp_unslash( $_POST['test_subject'] ) ) : __( 'Test Email', 'monte-mail-queue-throttle' );
 		$body            = isset( $_POST['test_body'] ) ? (string) wp_unslash( $_POST['test_body'] ) : __( 'Hello world via email.', 'monte-mail-queue-throttle' );
+		$domain_result   = $this->resolve_test_sender_domain( $settings, $sender_domain );
+		$sender_domain   = $domain_result['domain'];
 		$attachment_path = $this->uploaded_test_attachment_path();
 		$mail            = array(
 			'to'          => array( $recipient ),
@@ -577,6 +641,13 @@ class Monte_Mail_Queue_Admin {
 		$status          = $this->throttle_window && method_exists( $this->throttle_window, 'status' ) ? $this->throttle_window->status( $transport ) : array( 'allowed' => true );
 
 		try {
+			if ( ! $domain_result['valid'] ) {
+				$message = __( 'Selected sender domain is not in the configured allowlist.', 'monte-mail-queue-throttle' );
+				$this->repository->log( 0, 'test_failed', $message, '' );
+				add_settings_error( 'wmqt_messages', 'wmqt_test_mail_failed', $message, 'error' );
+				return;
+			}
+
 			if ( empty( $status['allowed'] ) ) {
 				$this->repository->log( 0, 'minute' === ( $status['reason'] ?? '' ) ? 'throttled_minute' : 'throttled_hour', $this->throttle_message( $status ), '' );
 				add_settings_error( 'wmqt_messages', 'wmqt_test_mail_throttled', __( 'Test email was throttled by the active send window.', 'monte-mail-queue-throttle' ), 'error' );
@@ -616,9 +687,7 @@ class Monte_Mail_Queue_Admin {
 			$this->repository->log( 0, 'test_failed', __( 'wp_mail() returned false for the test email.', 'monte-mail-queue-throttle' ), '' );
 			add_settings_error( 'wmqt_messages', 'wmqt_test_mail_failed', __( 'wp_mail() returned false for the test email.', 'monte-mail-queue-throttle' ), 'error' );
 		} finally {
-			if ( '' !== $attachment_path && file_exists( $attachment_path ) ) {
-				@unlink( $attachment_path );
-			}
+			$this->delete_uploaded_test_file( $attachment_path );
 		}
 	}
 
