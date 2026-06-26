@@ -81,6 +81,24 @@
 	overflow-wrap: anywhere;
 }
 
+.wmqt-settings-section {
+	margin-top: 22px;
+}
+
+.wmqt-test-mail {
+	background: var(--wmqt-surface);
+	border: 1px solid var(--wmqt-border);
+	border-radius: 6px;
+	margin-top: 24px;
+	max-width: 760px;
+	padding: 16px;
+}
+
+.wmqt-test-mail textarea {
+	min-height: 120px;
+	width: 100%;
+}
+
 .wmqt-chart-card,
 .wmqt-preview {
 	background: var(--wmqt-surface);

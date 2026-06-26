@@ -189,7 +189,7 @@ class Monte_Mail_Queue_Plugin {
 	 */
 	public function admin() {
 		if ( ! $this->admin instanceof Monte_Mail_Queue_Admin ) {
-			$this->admin = new Monte_Mail_Queue_Admin( $this->settings, $this->repository, $this->installer );
+			$this->admin = new Monte_Mail_Queue_Admin( $this->settings, $this->repository, $this->installer, $this->throttle_window, $this->azure_client );
 		}
 
 		return $this->admin;
